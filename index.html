@@ -183,7 +183,7 @@ function calcolaMagazzino(ordId) {
 
     const haLordo = Object.values(lordo).some(v => v > 0);
     const haVendMagg = Object.values(vendMagg).some(v => v > 0);
-    if (haLordo || i === idxCorrente) {
+    if (haLordo || haVendMagg || i === idxCorrente) {
       righe.push({ ordId: o.id, data: o.data, note: o.note, lordo, vendMagg, residuo, haVendMagg, isCorrente: i === idxCorrente });
     }
   }
