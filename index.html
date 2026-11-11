@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestione Ordini Caffè</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#3a2000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Caffè">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root {
+    --bg: #1a1208; --surface: #2a1f10; --surface2: #3a2d1a;
+    --border: #5a4020; --accent: #c8860a; --accent2: #e6a020;
+    --text: #f0e0c0; --text2: #b09060; --text3: #806040;
+    --green: #4caf50; --red: #e53935; --blue: #42a5f5;
+    --radius: 8px; --shadow: 0 2px 8px rgba(0,0,0,0.5);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+  .header { background: linear-gradient(135deg, #3a2000, #1a1208); border-bottom: 2px solid var(--accent); padding: 12px 20px; display: flex; align-items: center; gap: 12px; }
+  .header h1 { font-size: 1.3rem; color: var(--accent2); }
+  .header .subtitle { color: var(--text2); font-size: 0.85rem; }
+  .coffee-icon { font-size: 1.8rem; }
+
+  .nav { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; gap: 4px; padding: 8px 16px; overflow-x: auto; }
+  .nav-btn { padding: 6px 14px; border: 1px solid var(--border); border-radius: 20px; background: transparent; color: var(--text2); cursor: pointer; font-size: 0.85rem; white-space: nowrap; transition: all .2s; }
+  .nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .nav-btn.active { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+
+  .main { padding: 16px; max-width: 1200px; margin: 0 auto; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+  .card-title { font-size: 0.95rem; font-weight: 600; color: var(--accent2); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  @media(max-width: 600px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr 1fr; } }
+
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 0.75rem; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; }
+  .field input, .field select { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 8px 10px; font-size: 0.9rem; outline: none; }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
+  .field input[type=number] { text-align: right; }
+
+  .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; transition: all .15s; }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-danger:hover { opacity: .85; }
+  .btn-sm { padding: 4px 10px; font-size: 0.78rem; }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text2); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th { background: var(--surface2); color: var(--text2); font-size: 0.75rem; text-transform: uppercase; letter-spacing: .5px; padding: 8px 10px; text-align: left; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border); }
+  tr:hover td { background: rgba(200,134,10,.05); }
+  .text-right { text-align: right; }
+  .text-center { text-align: center; }
+
+  .stat-box { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; text-align: center; }
+  .stat-val { font-size: 1.3rem; font-weight: 700; color: var(--accent2); }
+  .stat-lbl { font-size: 0.72rem; color: var(--text3); text-transform: uppercase; margin-top: 2px; }
+  .stat-green .stat-val { color: var(--green); }
+  .stat-red .stat-val { color: var(--red); }
+  .stat-blue .stat-val { color: var(--blue); }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600; }
+  .badge-classico { background: rgba(200,134,10,.2); color: #e6a020; }
+  .badge-deca { background: rgba(66,165,245,.2); color: #42a5f5; }
+  .badge-oro { background: rgba(255,215,0,.15); color: #ffd700; }
+
+  .cb-incassato { width:18px; height:18px; cursor:pointer; accent-color:var(--green); }
+  tr.incassato-si td { opacity:.55; }
+  tr.incassato-si td:first-child { text-decoration:line-through; color:var(--text3); }
+
+  .sep { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+  .row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+  .text-green { color: var(--green); } .text-red { color: var(--red); } .text-blue { color: var(--blue); } .text-accent { color: var(--accent2); }
+  .empty { text-align: center; color: var(--text3); padding: 24px; font-style: italic; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; background: var(--surface2); border: 1px solid var(--border); font-size: 0.78rem; color: var(--text2); margin: 2px; }
+  .pill-active { background: rgba(200,134,10,.15); border-color: var(--accent); color: var(--accent2); cursor: pointer; }
+  .pill-active:hover { background: rgba(200,134,10,.3); }
+  .order-card { border-left: 3px solid var(--accent); cursor: pointer; transition: border-color .2s; }
+  .order-card:hover { border-color: var(--accent2); }
+  .order-card.selected { border-color: var(--green); background: rgba(76,175,80,.05); }
+  .tag-open { color: var(--green); font-size: 0.75rem; font-weight: 600; }
+  .tag-closed { color: var(--text3); font-size: 0.75rem; }
+  .input-inline { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 4px 6px; font-size: 0.85rem; width: 70px; text-align: right; outline: none; }
+  .input-inline:focus { border-color: var(--accent); }
+  details > summary { cursor: pointer; color: var(--accent2); font-size: 0.85rem; list-style: none; }
+  details > summary::before { content: '▶ '; font-size: 0.7rem; }
+  details[open] > summary::before { content: '▼ '; }
+  .alert { padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 10px; }
+  .alert-info { background: rgba(66,165,245,.1); border: 1px solid rgba(66,165,245,.3); color: var(--blue); }
+  .alert-warn { background: rgba(255,167,38,.1); border: 1px solid rgba(255,167,38,.3); color: #ffa726; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="coffee-icon">☕</div>
+  <div>
+    <h1>Gestione Ordini Caffè</h1>
+    <div class="subtitle">Cialde, acqua e quote colleghi</div>
+  </div>
+</div>
+
+<div class="nav" id="navBar">
+  <button class="nav-btn active" onclick="showPage('ordini')" id="tab-ordini">📋 Ordini</button>
+  <button class="nav-btn" onclick="showPage('nuovo')" id="tab-nuovo">➕ Nuovo Ordine</button>
+  <button class="nav-btn" onclick="showPage('colleghi')" id="tab-colleghi">👥 Colleghi</button>
+  <button class="nav-btn" onclick="showPage('config')" id="tab-config">⚙️ Configurazione</button>
+</div>
+
+<div class="main" id="mainContent"></div>
+
+<script>
+// ===================== DATA LAYER =====================
+const DB_KEY = 'caffe_gestione_v4';
+function loadDB() {
+  try { return JSON.parse(localStorage.getItem(DB_KEY)) || defaultDB(); }
+  catch { return defaultDB(); }
+}
+function saveDB() { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+function defaultDB() {
+  return {
+    config: {
+      prezzi: { CLASSICO: 22, DECA: 25, ORO: 24 },
+      prezzoAcqua: 3.5,
+      cialdePerScatola: { CLASSICO: 150, DECA: 150, ORO: 150 },
+      maggiorazioneInvenduto: 20
+    },
+    colleghi: ['Franco (Casa)', 'Franco', 'Maria Sole', 'Anna', 'Eleonora', 'Teresa', 'Sara', 'Simona', 'Rosaria'],
+    ordini: []
+  };
+}
+
+let db = loadDB();
+let currentPage = 'ordini';
+let selectedOrderId = null;
+
+// ===================== UTILS =====================
+const fmt = (n, d=2) => (+(n||0)).toFixed(d).replace('.', ',') + ' €';
+const fmtN = (n, d=2) => (+(n||0)).toFixed(d).replace('.', ',');
+const fmtPcs = n => Math.round(n||0);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+const MISCELE = ['CLASSICO', 'DECA', 'ORO'];
+const BADGE = { CLASSICO: 'badge-classico', DECA: 'badge-deca', ORO: 'badge-oro' };
+const EMOJI = { CLASSICO: '☕', DECA: '🍵', ORO: '✨' };
+
+function costoUnitario(miscela, includeAcqua, linea) {
+  const prezzoScatola = linea?.prezzoScatola ?? db.config.prezzi[miscela] ?? 0;
+  const prezzoAcqua = linea?.prezzoAcqua ?? db.config.prezzoAcqua ?? 0;
+  const cialde = db.config.cialdePerScatola[miscela] || 150;
+  const costoScatolaTot = prezzoScatola + (includeAcqua ? prezzoAcqua : 0);
+  return costoScatolaTot / cialde;
+}
+
+function calcolaOrdine(ordine) {
+  let result = { linee: [], totaleCialde: 0, totaleCosto: 0, totaleAcqua: 0, totaleScatole: 0, spedizione: ordine.spedizione || 0 };
+  for (const l of ordine.linee) {
+    const cCon = costoUnitario(l.miscela, true, l);
+    const cSenza = costoUnitario(l.miscela, false, l);
+    const cialde = db.config.cialdePerScatola[l.miscela] || 150;
+    const totCialde = l.scatole * cialde;
+    const prezzoAcqua = l.prezzoAcqua ?? db.config.prezzoAcqua;
+    const prezzoScatola = l.prezzoScatola ?? db.config.prezzi[l.miscela];
+    const costoAcqua = l.cassePagante * prezzoAcqua;
+    const costoBase = l.scatole * prezzoScatola;
+    result.linee.push({ ...l, totCialde, costoBase, costoAcqua, cUnitConAcqua: cCon, cUnitSenzaAcqua: cSenza, prezzoScatola, prezzoAcqua });
+    result.totaleCialde += totCialde;
+    result.totaleCosto += costoBase + costoAcqua;
+    result.totaleAcqua += costoAcqua;
+    result.totaleScatole += l.scatole;
+  }
+  if (result.spedizione > 0 && result.totaleCialde > 0) {
+    const addPerCialda = result.spedizione / result.totaleCialde;
+    result.linee = result.linee.map(l => ({
+      ...l,
+      cUnitConAcqua: l.cUnitConAcqua + addPerCialda,
+      cUnitSenzaAcqua: l.cUnitSenzaAcqua + addPerCialda
+    }));
+  }
+  result.totaleCosto += result.spedizione;
+  return result;
+}
+
+function calcolaQuoteOrdine(ordine) {
+  const lineeCalcolate = calcolaOrdine(ordine).linee;
+  const mapCosto = {};
+  for (const l of lineeCalcolate) {
+    mapCosto[l.miscela] = { conAcqua: l.cUnitConAcqua, senzaAcqua: l.cUnitSenzaAcqua };
+  }
+  const perCollegaOrd = {};
+  const dettaglioOrd = [];
+  for (const q of (ordine.quote || [])) {
+    if (!perCollegaOrd[q.collega]) perCollegaOrd[q.collega] = 0;
+    const cu = mapCosto[q.miscela];
+    if (!cu) continue;
+    const acqua = q.acqua === true || q.acqua === 1 || q.acqua === '1';
+    const costo = q.cialde * (acqua ? cu.conAcqua : cu.senzaAcqua);
+    perCollegaOrd[q.collega] += costo;
+    dettaglioOrd.push({ ...q, costo });
+  }
+  const perCollegaInv = {};
+  const dettaglioInv = [];
+  const magg = 1 + (ordine.maggiorazione ?? db.config.maggiorazioneInvenduto) / 100;
+  for (const q of (ordine.quoteInvenduto || [])) {
+    if (!perCollegaInv[q.collega]) perCollegaInv[q.collega] = 0;
+    const cu = mapCosto[q.miscela];
+    if (!cu) continue;
+    const acqua = q.acqua === true || q.acqua === 1 || q.acqua === '1';
+    const costo = q.cialde * (acqua ? cu.conAcqua : cu.senzaAcqua) * magg;
+    perCollegaInv[q.collega] += costo;
+    dettaglioInv.push({ ...q, costo });
+  }
+  return { perCollegaOrd, perCollegaInv, dettaglioOrd, dettaglioInv };
+}
+
+function calcolaDisponibilitaOrdine(ordine) {
+  const info = calcolaOrdine(ordine);
+  const result = {};
+  for (const l of info.linee) result[l.miscela] = l.totCialde;
+  for (const q of (ordine.quote || [])) {
+    if (!result[q.miscela]) result[q.miscela] = 0;
+    result[q.miscela] -= q.cialde;
+  }
+  for (const q of (ordine.quoteInvenduto || [])) {
+    if (!result[q.miscela]) result[q.miscela] = 0;
+    result[q.miscela] -= q.cialde;
+  }
+  return result;
+}
+
+function calcolaSaldo(ordine) {
+  const { totaleCosto, linee: lineeCalc } = calcolaOrdine(ordine);
+  const mapCU = {};
+  for (const l of lineeCalc) mapCU[l.miscela] = { con: l.cUnitConAcqua, senza: l.cUnitSenzaAcqua };
+  const magg = 1 + (ordine.maggiorazione ?? db.config.maggiorazioneInvenduto) / 100;
+
+  let dovutoOrd = 0, incassatoOrd = 0;
+  for (const q of (ordine.quote || [])) {
+    const cu = mapCU[q.miscela]; if (!cu) continue;
+    const acqua = q.acqua === true || q.acqua === 1 || q.acqua === '1';
+    const val = q.cialde * (acqua ? cu.con : cu.senza);
+    dovutoOrd += val;
+    if (q.incassato) incassatoOrd += val;
+  }
+  let dovutoInv = 0, incassatoInv = 0;
+  for (const q of (ordine.quoteInvenduto || [])) {
+    const cu = mapCU[q.miscela]; if (!cu) continue;
+    const acqua = q.acqua === true || q.acqua === 1 || q.acqua === '1';
+    const val = q.cialde * (acqua ? cu.con : cu.senza) * magg;
+    dovutoInv += val;
+    if (q.incassato) incassatoInv += val;
+  }
+  const dovuto = dovutoOrd + dovutoInv;
+  const incassato = incassatoOrd + incassatoInv;
+  const daIncassare = dovuto - incassato;
+  return { esborso: totaleCosto, dovuto, dovutoOrd, dovutoInv, incassato, incassatoOrd, incassatoInv, daIncassare, saldo: incassato - totaleCosto };
+}
+
+function toggleIncassato(ordId, idx, isInvenduto, checked) {
+  const ord = db.ordini.find(o=>o.id===ordId);
+  if (!ord) return;
+  if (isInvenduto) { if (ord.quoteInvenduto[idx]) ord.quoteInvenduto[idx].incassato = checked; }
+  else { if (ord.quote[idx]) ord.quote[idx].incassato = checked; }
+  saveDB();
+  const { incassatoOrd, incassatoInv, daIncassare, saldo } = calcolaSaldo(ord);
+  const upd = { sb_incassato_ord: fmt(incassatoOrd), sb_incassato_inv: fmt(incassatoInv), sb_da_incassare: fmt(daIncassare), sb_saldo: fmt(saldo) };
+  for (const [id, val] of Object.entries(upd)) { const el=document.getElementById(id); if(el) el.textContent=val; }
+  const elDa = document.getElementById('sb_da_incassare');
+  if (elDa) elDa.style.color = daIncassare > 0.005 ? 'var(--red)' : 'var(--green)';
+  const elS = document.getElementById('sb_saldo');
+  if (elS) elS.style.color = saldo >= 0 ? 'var(--green)' : 'var(--red)';
+  const tr = document.querySelector(`input[onchange*="toggleIncassato('${ordId}',${idx},${isInvenduto}"]`)?.closest('tr');
+  if (tr) { if (checked) tr.classList.add('incassato-si'); else tr.classList.remove('incassato-si'); }
+}
+
+// ===================== PAGES =====================
+function showPage(p) {
+  currentPage = p;
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const tb = document.getElementById('tab-' + p);
+  if (tb) tb.classList.add('active');
+  renderPage();
+}
+
+function renderPage() {
+  const el = document.getElementById('mainContent');
+  if (currentPage === 'ordini') el.innerHTML = pageOrdini();
+  else if (currentPage === 'nuovo') el.innerHTML = pageNuovoOrdine();
+  else if (currentPage === 'dettaglio') el.innerHTML = pageDettaglio();
+  else if (currentPage === 'colleghi') el.innerHTML = pageColleghi();
+  else if (currentPage === 'config') el.innerHTML = pageConfig();
+  attachEvents();
+}
+
+// ===================== PAGE: ORDINI =====================
+function pageOrdini() {
+  const ordini = [...db.ordini].sort((a,b) => new Date(b.data) - new Date(a.data));
+  if (!ordini.length) return `<div class="card"><div class="empty">Nessun ordine. Creane uno con "➕ Nuovo Ordine".</div></div>`;
+
+  let html = '';
+  for (const ord of ordini) {
+    const { esborso, dovuto, incassato, daIncassare: daInc, saldo } = calcolaSaldo(ord);
+    const disp = calcolaDisponibilitaOrdine(ord);
+    const invendute = Object.values(disp).filter(v=>v>0).length > 0;
+    const stato = ord.chiuso ? `<span class="tag-closed">🔒 Chiuso</span>` : `<span class="tag-open">🟢 Aperto</span>`;
+    const lineeHtml = ord.linee.map(l =>
+      `<span class="badge ${BADGE[l.miscela]}">${EMOJI[l.miscela]} ${l.scatole} sc. ${l.miscela}</span> `
+    ).join('');
+
+    html += `<div class="card order-card" onclick="openOrdine('${ord.id}')">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-weight:600;font-size:1rem;color:var(--accent2)">${ord.data} &nbsp; ${stato}</div>
+        <div style="font-size:0.8rem;color:var(--text3)">${ord.note||''}</div>
+      </div>
+      <div style="margin-bottom:8px">${lineeHtml}</div>
+      <div class="grid-4" style="gap:8px">
+        <div class="stat-box"><div class="stat-val" style="color:var(--red)">${fmt(esborso)}</div><div class="stat-lbl">💸 Esborso</div></div>
+        <div class="stat-box"><div class="stat-val" style="color:#ffa726">${fmt(dovuto)}</div><div class="stat-lbl">📋 Dovuto</div></div>
+        <div class="stat-box"><div class="stat-val" style="color:var(--blue)">${fmt(incassato)}</div><div class="stat-lbl">✅ Incassato</div></div>
+        <div class="stat-box"><div class="stat-val" style="color:${saldo>=0?'var(--green)':'var(--red)'}">${fmt(saldo)}</div><div class="stat-lbl">🏦 Saldo</div></div>
+      </div>
+    </div>`;
+  }
+  return html;
+}
+
+// ===================== PAGE: NUOVO ORDINE =====================
+function pageNuovoOrdine(editId) {
+  const editing = editId ? db.ordini.find(o=>o.id===editId) : null;
+  const today = editing ? editing.data : new Date().toISOString().slice(0,10);
+  const note = editing ? editing.note || '' : '';
+  const linee = editing ? editing.linee : [
+    { id:uid(), miscela:'CLASSICO', scatole:2, cassePagante:2, prezzoScatola: db.config.prezzi.CLASSICO, prezzoAcqua: db.config.prezzoAcqua },
+    { id:uid(), miscela:'DECA', scatole:1, cassePagante:1, prezzoScatola: db.config.prezzi.DECA, prezzoAcqua: db.config.prezzoAcqua }
+  ];
+
+  let lineeHtml = '';
+  for (const l of linee) {
+    lineeHtml += rigaLinea(l, l.id);
+  }
+
+  return `
+    <div class="card">
+      <div class="card-title">➕ ${editing ? 'Modifica Ordine' : 'Nuovo Ordine'}</div>
+      <div class="grid-2" style="margin-bottom:12px">
+        <div class="field"><label>Data Ordine</label><input type="date" id="ord_data" value="${today}"></div>
+        <div class="field"><label>Note (opzionale)</label><input type="text" id="ord_note" value="${note}" placeholder="es. novembre 2026"></div>
+      </div>
+      <div class="grid-2" style="margin-bottom:12px">
+        <div class="field"><label>🚚 Spese di Spedizione (€) — opzionale, ripartite per cialda</label><input type="number" min="0" step="0.01" id="ord_spedizione" value="${editing?.spedizione||0}" onchange="updatePreview()"></div>
+      </div>
+
+      <div class="card-title" style="margin-top:4px">📦 Linee Prodotto</div>
+      <div id="linee_container">
+        ${lineeHtml}
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="addLinea()" style="margin-top:8px">+ Aggiungi Miscela</button>
+
+      <hr class="sep">
+      <div id="preview_ordine"></div>
+      <hr class="sep">
+
+      <div class="row" style="justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="showPage('ordini')">Annulla</button>
+        <button class="btn btn-primary" onclick="salvaOrdine('${editId||''}')">💾 ${editing ? 'Aggiorna Ordine' : 'Crea Ordine'}</button>
+      </div>
+    </div>`;
+}
+
+function rigaLinea(l, lid) {
+  const opts = MISCELE.map(m => `<option value="${m}" ${l.miscela===m?'selected':''}>${EMOJI[m]} ${m}</option>`).join('');
+  const pScatola = l.prezzoScatola ?? db.config.prezzi[l.miscela] ?? 0;
+  const pAcqua = l.prezzoAcqua ?? db.config.prezzoAcqua ?? 0;
+  return `<div class="card" style="background:var(--surface2);margin-bottom:8px" id="linea_${lid}">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto;gap:8px;align-items:end">
+      <div class="field"><label>Miscela</label><select onchange="onMiscelaChange('${lid}')" id="miscela_${lid}">${opts}</select></div>
+      <div class="field"><label>Scatole (${db.config.cialdePerScatola[l.miscela]||150}/sc)</label><input type="number" min="1" id="scatole_${lid}" value="${l.scatole}" onchange="updatePreview()"></div>
+      <div class="field"><label>Casse Acqua</label><input type="number" min="0" id="ncasse_${lid}" value="${l.cassePagante}" onchange="updatePreview()"></div>
+      <div class="field"><label>€ Scatola</label><input type="number" min="0" step="0.5" id="pscatola_${lid}" value="${pScatola}" onchange="updatePreview()"></div>
+      <div class="field"><label>€ Cassa Acqua</label><input type="number" min="0" step="0.1" id="pacqua_${lid}" value="${pAcqua}" onchange="updatePreview()"></div>
+      <div style="display:flex;align-items:center;padding-bottom:2px">
+        <button class="btn btn-danger btn-sm" onclick="removeLinea('${lid}')">✕</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function onMiscelaChange(lid) {
+  const miscela = document.getElementById('miscela_'+lid)?.value;
+  if (miscela) {
+    const ps = document.getElementById('pscatola_'+lid);
+    if (ps) ps.value = db.config.prezzi[miscela] || 0;
+  }
+  updatePreview();
+}
+
+function getLineeFromForm() {
+  const ids = [...document.querySelectorAll('[id^="linea_"]')].map(el => el.id.replace('linea_',''));
+  return ids.map(id => ({
+    id,
+    miscela: document.getElementById('miscela_'+id)?.value || 'CLASSICO',
+    scatole: parseInt(document.getElementById('scatole_'+id)?.value || 1),
+    cassePagante: parseInt(document.getElementById('ncasse_'+id)?.value || 0),
+    prezzoScatola: parseFloat(document.getElementById('pscatola_'+id)?.value || 0),
+    prezzoAcqua: parseFloat(document.getElementById('pacqua_'+id)?.value || 0)
+  })).filter(l => !isNaN(l.scatole));
+}
+
+function addLinea() {
+  const id = uid();
+  const container = document.getElementById('linee_container');
+  const div = document.createElement('div');
+  div.innerHTML = rigaLinea({ miscela:'CLASSICO', scatole:1, cassePagante:1, prezzoScatola: db.config.prezzi.CLASSICO, prezzoAcqua: db.config.prezzoAcqua }, id);
+  container.appendChild(div.firstElementChild);
+  updatePreview();
+}
+
+function removeLinea(id) {
+  document.getElementById('linea_'+id)?.remove();
+  updatePreview();
+}
+
+function updatePreview() {
+  const linee = getLineeFromForm();
+  const spedizione = parseFloat(document.getElementById('ord_spedizione')?.value || 0);
+  if (!linee.length) { const el = document.getElementById('preview_ordine'); if(el) el.innerHTML=''; return; }
+  const fakeOrd = { linee, quote:[], quoteInvenduto:[], spedizione };
+  const info = calcolaOrdine(fakeOrd);
+
+  let rowsHtml = info.linee.map(l => `
+    <tr>
+      <td><span class="badge ${BADGE[l.miscela]}">${EMOJI[l.miscela]} ${l.miscela}</span></td>
+      <td class="text-right">${l.scatole}</td>
+      <td class="text-right">${l.totCialde}</td>
+      <td class="text-right">${fmt(l.prezzoScatola)}</td>
+      <td class="text-right">${fmt(l.costoBase)}</td>
+      <td class="text-right">${fmt(l.costoAcqua)}</td>
+      <td class="text-right text-accent">${fmtN(l.cUnitConAcqua,4)} €</td>
+      <td class="text-right">${fmtN(l.cUnitSenzaAcqua,4)} €</td>
+    </tr>`).join('');
+
+  const el = document.getElementById('preview_ordine');
+  if (!el) return;
+  const spedHtml = spedizione > 0 ? `<tr style="color:var(--text2)"><td colspan="4">🚚 Spedizione</td><td class="text-right" colspan="4">${fmt(spedizione)}</td></tr>` : '';
+  el.innerHTML = `<div class="card-title">📊 Anteprima Costi</div>
+    <table>
+      <thead><tr><th>Miscela</th><th class="text-right">Scatole</th><th class="text-right">Cialde</th><th class="text-right">€/scatola</th><th class="text-right">Costo base</th><th class="text-right">Acqua</th><th class="text-right">€/cialda c/acq</th><th class="text-right">€/cialda s/acq</th></tr></thead>
+      <tbody>${rowsHtml}${spedHtml}
+        <tr style="font-weight:700;background:var(--surface2)">
+          <td>TOTALE</td><td class="text-right">${info.totaleScatole}</td><td class="text-right">${info.totaleCialde}</td>
+          <td></td><td class="text-right">${fmt(info.totaleCosto - info.totaleAcqua - spedizione)}</td>
+          <td class="text-right">${fmt(info.totaleAcqua)}</td><td colspan="2" class="text-right text-accent">${fmt(info.totaleCosto)}</td>
+        </tr>
+      </tbody>
+    </table>`;
+}
+
+function salvaOrdine(editId) {
+  const data = document.getElementById('ord_data')?.value;
+  const note = document.getElementById('ord_note')?.value || '';
+  const spedizione = parseFloat(document.getElementById('ord_spedizione')?.value || 0);
+  const linee = getLineeFromForm();
+  if (!data || !linee.length) { alert('Inserisci data e almeno una linea prodotto.'); return; }
+
+  if (editId) {
+    const idx = db.ordini.findIndex(o=>o.id===editId);
+    if (idx>=0) {
+      db.ordini[idx] = { ...db.ordini[idx], data, note, spedizione, linee };
+      saveDB();
+      openOrdine(editId);
+      return;
+    }
+  }
+
+  const ordine = { id: uid(), data, note, spedizione, linee, quote: [], quoteInvenduto: [], chiuso: false, maggiorazione: db.config.maggiorazioneInvenduto };
+  db.ordini.push(ordine);
+  saveDB();
+  openOrdine(ordine.id);
+}
+
+// ===================== PAGE: DETTAGLIO =====================
+function openOrdine(id) {
+  selectedOrderId = id;
+  currentPage = 'dettaglio';
+  renderPage();
+}
+
+function pageDettaglio() {
+  const ord = db.ordini.find(o=>o.id===selectedOrderId);
+  if (!ord) return `<div class="card"><div class="empty">Ordine non trovato.</div></div>`;
+
+  const info = calcolaOrdine(ord);
+  const { perCollegaOrd, perCollegaInv } = calcolaQuoteOrdine(ord);
+  const disp = calcolaDisponibilitaOrdine(ord);
+  const { esborso, dovuto, dovutoOrd, dovutoInv, incassato, incassatoOrd, incassatoInv, daIncassare, saldo } = calcolaSaldo(ord);
+  const magg = ord.maggiorazione ?? db.config.maggiorazioneInvenduto;
+
+  let html = `<div class="card">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <button class="btn btn-ghost btn-sm" onclick="showPage('ordini')">← Ordini</button>
+      <div style="font-size:1.1rem;font-weight:700;color:var(--accent2);flex:1">📅 Ordine del ${ord.data} ${ord.note?'— '+ord.note:''}</div>
+      ${!ord.chiuso ? `<button class="btn btn-ghost btn-sm" onclick="editOrdine('${ord.id}')">✏️ Modifica</button>
+        <button class="btn btn-primary btn-sm" onclick="chiudiOrdine('${ord.id}')">🔒 Chiudi Ordine</button>` :
+        `<span class="tag-closed">🔒 Chiuso</span><button class="btn btn-ghost btn-sm" onclick="riapreOrdine('${ord.id}')">🔓 Riapri</button>`}
+      <button class="btn btn-danger btn-sm" onclick="eliminaOrdine('${ord.id}')">🗑️</button>
+    </div>`;
+
+  html += `
+  <div class="grid-4" style="margin-bottom:8px">
+    <div class="stat-box"><div class="stat-val" style="color:var(--red)">${fmt(esborso)}</div><div class="stat-lbl">💸 Esborso</div></div>
+    <div class="stat-box"><div class="stat-val" style="color:#ffa726">${fmt(dovutoOrd)}</div><div class="stat-lbl">📋 Dovuto (ord.)</div></div>
+    <div class="stat-box"><div class="stat-val" style="color:#ffa726">${fmt(dovutoInv)}</div><div class="stat-lbl">📋 Dovuto (inv.)</div></div>
+    <div class="stat-box"><div class="stat-val" style="color:#ffa726">${fmt(dovuto)}</div><div class="stat-lbl">📋 Dovuto Totale</div></div>
+  </div>
+  <div class="grid-4">
+    <div class="stat-box"><div id="sb_incassato_ord" class="stat-val" style="color:var(--blue)">${fmt(incassatoOrd)}</div><div class="stat-lbl">✅ Incassato (ord.)</div></div>
+    <div class="stat-box"><div id="sb_incassato_inv" class="stat-val" style="color:var(--blue)">${fmt(incassatoInv)}</div><div class="stat-lbl">✅ Incassato (inv.)</div></div>
+    <div class="stat-box"><div id="sb_da_incassare" class="stat-val" style="color:${daIncassare>0.005?'var(--red)':'var(--green)'}">${fmt(daIncassare)}</div><div class="stat-lbl">⏳ Da Incassare</div></div>
+    <div class="stat-box"><div id="sb_saldo" class="stat-val" style="color:${saldo>=0?'var(--green)':'var(--red)'}">${fmt(saldo)}</div><div class="stat-lbl">🏦 Saldo</div></div>
+  </div></div>`;
+
+  const spedOrd = ord.spedizione || 0;
+  html += `<div class="card"><div class="card-title">📦 Prodotti Ordinati</div>
+    <table>
+      <thead><tr><th>Miscela</th><th class="text-right">Scatole</th><th class="text-right">Acqua casse</th><th class="text-right">Tot Cialde</th><th class="text-right">€/scatola</th><th class="text-right">Costo base</th><th class="text-right">Acqua €</th><th class="text-right">€/cialda c/acq</th><th class="text-right">€/cialda s/acq</th></tr></thead>
+      <tbody>`;
+  for (const l of info.linee) {
+    html += `<tr>
+      <td><span class="badge ${BADGE[l.miscela]}">${EMOJI[l.miscela]} ${l.miscela}</span></td>
+      <td class="text-right">${l.scatole}</td>
+      <td class="text-right">${l.cassePagante}</td>
+      <td class="text-right">${l.totCialde}</td>
+      <td class="text-right">${fmt(l.prezzoScatola)}</td>
+      <td class="text-right">${fmt(l.costoBase)}</td>
+      <td class="text-right">${fmt(l.costoAcqua)}</td>
+      <td class="text-right text-accent">${fmtN(l.cUnitConAcqua,4)} €</td>
+      <td class="text-right">${fmtN(l.cUnitSenzaAcqua,4)} €</td>
+    </tr>`;
+  }
+  if (spedOrd > 0) html += `<tr style="color:var(--text2)"><td colspan="5">🚚 Spedizione</td><td class="text-right" colspan="4">${fmt(spedOrd)}</td></tr>`;
+  html += `<tr style="font-weight:700;background:var(--surface2)">
+    <td>TOTALE</td><td class="text-right">${info.totaleScatole}</td><td></td><td class="text-right">${info.totaleCialde}</td>
+    <td></td><td class="text-right">${fmt(info.totaleCosto - info.totaleAcqua - spedOrd)}</td>
+    <td class="text-right">${fmt(info.totaleAcqua)}</td><td colspan="2" class="text-right text-accent">${fmt(info.totaleCosto)}</td>
+  </tr>`;
+  html += `</tbody></table></div>`;
+
+  html += `<div class="card"><div class="card-title">👥 Quote Colleghi — Ordine Principale</div>`;
+  if (!ord.chiuso) {
+    html += `<div class="alert alert-info" style="margin-bottom:10px">Aggiungi le quote acquistate da ogni collega.</div>
+    <div id="aggiungi_quota_form">
+      <div class="grid-4" style="margin-bottom:8px;align-items:end">
+        <div class="field"><label>Collega</label><select id="q_collega">
+          ${db.colleghi.map(c=>`<option>${c}</option>`).join('')}
+        </select></div>
+        <div class="field"><label>Miscela</label><select id="q_miscela">
+          ${info.linee.map(l=>`<option value="${l.miscela}">${EMOJI[l.miscela]} ${l.miscela}</option>`).join('')}
+        </select></div>
+        <div class="field"><label>N° Cialde</label><input type="number" min="1" id="q_cialde" value="30"></div>
+        <div class="field"><label>Include Acqua?</label>
+          <select id="q_acqua"><option value="1">✅ Sì</option><option value="0">❌ No</option></select>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="addQuota('${ord.id}', false)">+ Aggiungi Quota</button>
+    </div><br>`;
+  }
+
+  if (!ord.quote?.length) html += `<div class="empty">Nessuna quota inserita.</div>`;
+  else {
+    const tuttiColleghi = [...new Set(ord.quote.map(q=>q.collega))];
+    html += `<table><thead><tr><th>Collega</th><th>Miscela</th><th class="text-right">Cialde</th><th>Acqua</th><th class="text-right">Importo riga</th><th class="text-right" style="color:var(--accent2)">Tot. Collega</th><th class="text-center">✅ Incassato</th>${!ord.chiuso?'<th></th>':''}</tr></thead><tbody>`;
+    let totaleGenerale = 0;
+    for (const collega of tuttiColleghi) {
+      const righeCollega = ord.quote.map((q,i)=>({...q,i})).filter(q=>q.collega===collega);
+      const totCollega = perCollegaOrd[collega] || 0;
+      totaleGenerale += totCollega;
+      righeCollega.forEach((q, ri) => {
+        const cu = info.linee.find(l=>l.miscela===q.miscela);
+        const acqua = q.acqua === true || q.acqua === 1 || q.acqua === '1';
+        const costo = cu ? q.cialde * (acqua ? cu.cUnitConAcqua : cu.cUnitSenzaAcqua) : 0;
+        const isLast = ri === righeCollega.length - 1;
+        html += `<tr class="${q.incassato?'incassato-si':''}">
+          <td>${ri===0 ? q.collega : ''}</td>
+          <td><span class="badge ${BADGE[q.miscela]}">${EMOJI[q.miscela]} ${q.miscela}</span></td>
+          <td class="text-right">${q.cialde}</td>
+          <td class="text-center">${acqua?'✅':'❌'}</td>
+          <td class="text-right">${fmt(costo)}</td>
+          <td class="text-right text-accent" style="font-weight:${isLast?700:400}">${isLast ? fmt(totCollega) : ''}</td>
+          <td class="text-center"><input type="checkbox" class="cb-incassato" ${q.incassato?'checked':''} onchange="toggleIncassato('${ord.id}',${q.i},false,this.checked)"></td>
+          ${!ord.chiuso?`<td><button class="btn btn-danger btn-sm" onclick="removeQuota('${ord.id}',${q.i},false)">✕</button></td>`:''}
+        </tr>`;
+      });
+      if (righeCollega.length > 1) {
+        html += `<tr style="border-top:1px solid var(--accent);height:4px"><td colspan="${!ord.chiuso?8:7}"></td></tr>`;
+      }
+    }
+    html += `<tr style="font-weight:700;background:var(--surface2)">
+      <td>TOTALE</td><td></td><td class="text-right">${ord.quote.reduce((s,q)=>s+q.cialde,0)}</td>
+      <td></td><td></td><td class="text-right text-accent">${fmt(totaleGenerale)}</td><td></td>${!ord.chiuso?'<td></td>':''}
+    </tr>`;
+    html += `</tbody></table>`;
+  }
+  html += `</div>`;
+
+  html += `<div class="card"><div class="card-title">📊 Disponibilità Residua</div>
+    <div class="grid-3">`;
+  for (const miscela of MISCELE) {
+    if (disp[miscela] !== undefined) {
+      const avail = disp[miscela];
+      html += `<div class="stat-box"><div class="stat-val" style="color:${avail>0?'#ffa726':avail===0?'var(--green)':'var(--red)'}">${avail}</div><div class="stat-lbl">${EMOJI[miscela]} ${miscela}</div></div>`;
+    }
+  }
+  html += `</div></div>`;
+
+  const hasInvenduto = Object.values(disp).some(v=>v>0);
+  if (hasInvenduto || ord.quoteInvenduto?.length) {
+    html += `<div class="card"><div class="card-title">🏷️ Vendita Invenduto</div>
+      <div class="alert alert-warn">Maggiorazione:
+        <input class="input-inline" type="number" id="magg_input" value="${magg}" min="0" style="width:60px">
+        % &nbsp; <button class="btn btn-ghost btn-sm" onclick="aggiornaMagg('${ord.id}')">Aggiorna</button>
+      </div>`;
+
+    if (!ord.chiuso) {
+      html += `<div class="grid-4" style="margin:10px 0;align-items:end">
+        <div class="field"><label>Collega</label><select id="qi_collega">
+          ${db.colleghi.map(c=>`<option>${c}</option>`).join('')}
+        </select></div>
+        <div class="field"><label>Miscela (disponibile)</label><select id="qi_miscela">
+          ${MISCELE.filter(m=>(disp[m]||0)>0).map(m=>`<option value="${m}">${EMOJI[m]} ${m} (${disp[m]} rimanenti)</option>`).join('')}
+        </select></div>
+        <div class="field"><label>N° Cialde</label><input type="number" min="1" id="qi_cialde" value="10"></div>
+        <div class="field"><label>Include Acqua?</label>
+          <select id="qi_acqua"><option value="1">✅ Sì</option><option value="0">❌ No</option></select>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="addQuota('${ord.id}', true)">+ Vendi a maggiorazione</button><br><br>`;
+    }
+
+    if (ord.quoteInvenduto?.length) {
+      const tuttiInv = [...new Set(ord.quoteInvenduto.map(q=>q.collega))];
+      html += `<table><thead><tr><th>Collega</th><th>Miscela</th><th class="text-right">Cialde</th><th>Acqua</th><th class="text-right">Importo (+${magg}%)</th><th class="text-right" style="color:var(--accent2)">Tot. Collega</th><th class="text-center">✅ Incassato</th>${!ord.chiuso?'<th></th>':''}</tr></thead><tbody>`;
+      let totInvGen = 0;
+      for (const collega of tuttiInv) {
+        const righeCollega = ord.quoteInvenduto.map((q,i)=>({...q,i})).filter(q=>q.collega===collega);
+        const totCollega = perCollegaInv[collega] || 0;
+        totInvGen += totCollega;
+        righeCollega.forEach((q, ri) => {
+          const cu = info.linee.find(l=>l.miscela===q.miscela);
+          const acqua = q.acqua === true || q.acqua === 1 || q.acqua === '1';
+          const costoBase = cu ? q.cialde * (acqua ? cu.cUnitConAcqua : cu.cUnitSenzaAcqua) : 0;
+          const costo = costoBase * (1 + magg/100);
+          const isLast = ri === righeCollega.length - 1;
+          html += `<tr class="${q.incassato?'incassato-si':''}">
+            <td>${ri===0 ? q.collega : ''}</td>
+            <td><span class="badge ${BADGE[q.miscela]}">${EMOJI[q.miscela]} ${q.miscela}</span></td>
+            <td class="text-right">${q.cialde}</td>
+            <td class="text-center">${acqua?'✅':'❌'}</td>
+            <td class="text-right">${fmt(costo)}</td>
+            <td class="text-right text-accent" style="font-weight:${isLast?700:400}">${isLast ? fmt(totCollega) : ''}</td>
+            <td class="text-center"><input type="checkbox" class="cb-incassato" ${q.incassato?'checked':''} onchange="toggleIncassato('${ord.id}',${q.i},true,this.checked)"></td>
+            ${!ord.chiuso?`<td><button class="btn btn-danger btn-sm" onclick="removeQuota('${ord.id}',${q.i},true)">✕</button></td>`:''}
+          </tr>`;
+        });
+      }
+      html += `<tr style="font-weight:700;background:var(--surface2)">
+        <td>TOTALE</td><td></td><td class="text-right">${ord.quoteInvenduto.reduce((s,q)=>s+q.cialde,0)}</td>
+        <td></td><td></td><td class="text-right text-accent">${fmt(totInvGen)}</td><td></td>${!ord.chiuso?'<td></td>':''}
+      </tr>`;
+      html += `</tbody></table>`;
+    }
+    html += `</div>`;
+  }
+
+  return html;
+}
+
+// ===================== PAGE: COLLEGHI =====================
+function pageColleghi() {
+  const lista = db.colleghi.map((c,i) => `<tr>
+    <td>${c}</td>
+    <td class="text-right"><button class="btn btn-danger btn-sm" onclick="removeCollega(${i})">✕</button></td>
+  </tr>`).join('');
+
+  return `<div class="card">
+    <div class="card-title">👥 Gestione Colleghi</div>
+    <div class="row" style="margin-bottom:12px">
+      <div class="field" style="flex:1"><label>Nuovo collega</label><input type="text" id="new_collega" placeholder="Nome Cognome"></div>
+      <button class="btn btn-primary" onclick="addCollega()" style="align-self:flex-end">➕ Aggiungi</button>
+    </div>
+    <table>
+      <thead><tr><th>Nome</th><th></th></tr></thead>
+      <tbody>${lista}</tbody>
+    </table>
+  </div>`;
+}
+
+// ===================== PAGE: CONFIG =====================
+function pageConfig() {
+  const { prezzi, prezzoAcqua, cialdePerScatola, maggiorazioneInvenduto } = db.config;
+
+  return `<div class="card">
+    <div class="card-title">⚙️ Configurazione Prezzi</div>
+    <div class="grid-3" style="margin-bottom:12px">
+      ${MISCELE.map(m=>`<div class="field">
+        <label>${EMOJI[m]} Prezzo scatola ${m} (€)</label>
+        <input type="number" min="0" step="0.5" id="cfg_prezzo_${m}" value="${prezzi[m]||0}">
+      </div>`).join('')}
+    </div>
+    <div class="grid-3">
+      ${MISCELE.map(m=>`<div class="field">
+        <label>Cialde/scatola ${m}</label>
+        <input type="number" min="1" id="cfg_cialde_${m}" value="${cialdePerScatola[m]||150}">
+      </div>`).join('')}
+    </div>
+    <hr class="sep">
+    <div class="grid-2">
+      <div class="field"><label>💧 Prezzo Cassa Acqua (€)</label><input type="number" min="0" step="0.1" id="cfg_acqua" value="${prezzoAcqua}"></div>
+      <div class="field"><label>🏷️ Maggiorazione Invenduto (%)</label><input type="number" min="0" id="cfg_magg" value="${maggiorazioneInvenduto}"></div>
+    </div>
+    <hr class="sep">
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn btn-primary" onclick="salvaConfig()">💾 Salva Configurazione</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:0">
+    <div class="card-title">💾 Dati</div>
+    <div class="row">
+      <button class="btn btn-ghost" onclick="esportaDati()">📤 Esporta JSON</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('import_file').click()">📥 Importa JSON</button>
+      <input type="file" id="import_file" accept=".json" style="display:none" onchange="importaDati(event)">
+      <button class="btn btn-danger btn-sm" onclick="resetDati()">⚠️ Reset Tutto</button>
+    </div>
+  </div>`;
+}
+
+// ===================== ACTIONS =====================
+function attachEvents() {
+  if (currentPage === 'nuovo') setTimeout(updatePreview, 50);
+}
+
+function addQuota(ordId, isInvenduto) {
+  const ord = db.ordini.find(o=>o.id===ordId);
+  if (!ord) return;
+  const prefix = isInvenduto ? 'qi' : 'q';
+  const collega = document.getElementById(prefix+'_collega')?.value;
+  const miscela = document.getElementById(prefix+'_miscela')?.value;
+  const cialde = parseInt(document.getElementById(prefix+'_cialde')?.value||0);
+  const acqua = document.getElementById(prefix+'_acqua')?.value === '1';
+  if (!collega || !miscela || cialde<=0) { alert('Compila tutti i campi'); return; }
+
+  if (isInvenduto) {
+    const disp = calcolaDisponibilitaOrdine(ord);
+    if ((disp[miscela]||0) < cialde) { alert(`Disponibili solo ${disp[miscela]||0} cialde di ${miscela}`); return; }
+    if (!ord.quoteInvenduto) ord.quoteInvenduto = [];
+    ord.quoteInvenduto.push({ collega, miscela, cialde, acqua, incassato: false });
+  } else {
+    ord.quote.push({ collega, miscela, cialde, acqua, incassato: false });
+  }
+  saveDB();
+  renderPage();
+}
+
+function removeQuota(ordId, idx, isInvenduto) {
+  const ord = db.ordini.find(o=>o.id===ordId);
+  if (!ord) return;
+  if (isInvenduto) ord.quoteInvenduto.splice(idx, 1);
+  else ord.quote.splice(idx, 1);
+  saveDB();
+  renderPage();
+}
+
+function aggiornaMagg(ordId) {
+  const ord = db.ordini.find(o=>o.id===ordId);
+  if (!ord) return;
+  const v = parseFloat(document.getElementById('magg_input')?.value||20);
+  ord.maggiorazione = v;
+  saveDB();
+  renderPage();
+}
+
+function chiudiOrdine(id) {
+  if (!confirm('Chiudere questo ordine? Potrà essere riaperto in seguito.')) return;
+  const ord = db.ordini.find(o=>o.id===id);
+  if (ord) { ord.chiuso = true; saveDB(); renderPage(); }
+}
+
+function riapreOrdine(id) {
+  const ord = db.ordini.find(o=>o.id===id);
+  if (ord) { ord.chiuso = false; saveDB(); renderPage(); }
+}
+
+function editOrdine(id) {
+  const el = document.getElementById('mainContent');
+  el.innerHTML = pageNuovoOrdine(id);
+  attachEvents();
+}
+
+function eliminaOrdine(id) {
+  if (!confirm('Eliminare definitivamente questo ordine?')) return;
+  db.ordini = db.ordini.filter(o=>o.id!==id);
+  saveDB();
+  showPage('ordini');
+}
+
+function addCollega() {
+  const val = document.getElementById('new_collega')?.value?.trim();
+  if (!val) return;
+  if (db.colleghi.includes(val)) { alert('Collega già presente'); return; }
+  db.colleghi.push(val);
+  saveDB();
+  renderPage();
+}
+
+function removeCollega(idx) {
+  if (!confirm('Rimuovere ' + db.colleghi[idx] + '?')) return;
+  db.colleghi.splice(idx, 1);
+  saveDB();
+  renderPage();
+}
+
+function salvaConfig() {
+  for (const m of MISCELE) {
+    db.config.prezzi[m] = parseFloat(document.getElementById('cfg_prezzo_'+m)?.value||0);
+    db.config.cialdePerScatola[m] = parseInt(document.getElementById('cfg_cialde_'+m)?.value||150);
+  }
+  db.config.prezzoAcqua = parseFloat(document.getElementById('cfg_acqua')?.value||0);
+  db.config.maggiorazioneInvenduto = parseFloat(document.getElementById('cfg_magg')?.value||20);
+  saveDB();
+  alert('Configurazione salvata!');
+}
+
+function esportaDati() {
+  const blob = new Blob([JSON.stringify(db, null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'caffe_dati_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+}
+
+function importaDati(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.config || !data.ordini) throw new Error('Formato non valido');
+      if (!confirm('Importare i dati? Questo sovrascriverà tutto.')) return;
+      db = data;
+      saveDB();
+      showPage('ordini');
+      alert('Dati importati con successo!');
+    } catch { alert('Errore: file non valido.'); }
+  };
+  reader.readAsText(file);
+}
+
+function resetDati() {
+  if (!confirm('ATTENZIONE: questo cancellerà TUTTI i dati. Sicuro?')) return;
+  if (!confirm('Ultima conferma: vuoi davvero cancellare tutto?')) return;
+  db = defaultDB();
+  saveDB();
+  showPage('ordini');
+}
+
+// ===================== INIT =====================
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+renderPage();
+</script>
+</body>
+</html>
