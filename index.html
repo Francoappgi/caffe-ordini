@@ -40,6 +40,8 @@
   .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
   .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
   @media(max-width: 600px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr 1fr; } }
+  .linea-row { display:grid; grid-template-columns:1fr 1fr 1fr 1fr 1fr auto; gap:8px; align-items:end; }
+  @media(max-width:700px) { .linea-row { grid-template-columns:1fr 1fr 1fr; } .linea-row .linea-del { grid-column: 3; justify-self:end; } }
 
   .field { display: flex; flex-direction: column; gap: 4px; }
   .field label { font-size: 0.75rem; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; }
@@ -97,6 +99,12 @@
   details > summary::before { content: '▶ '; font-size: 0.7rem; }
   details[open] > summary::before { content: '▼ '; }
   .alert { padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 10px; }
+  /* Mobile: tabelle scrollabili orizzontalmente dentro il card */
+  @media(max-width:700px) {
+    .card { overflow-x: auto; }
+    table { min-width: 480px; }
+    .grid-4 { grid-template-columns: 1fr 1fr; }
+  }
   .alert-info { background: rgba(66,165,245,.1); border: 1px solid rgba(66,165,245,.3); color: var(--blue); }
   .alert-warn { background: rgba(255,167,38,.1); border: 1px solid rgba(255,167,38,.3); color: #ffa726; }
 </style>
@@ -382,13 +390,13 @@ function rigaLinea(l, lid) {
   const pScatola = l.prezzoScatola ?? db.config.prezzi[l.miscela] ?? 0;
   const pAcqua = l.prezzoAcqua ?? db.config.prezzoAcqua ?? 0;
   return `<div class="card" style="background:var(--surface2);margin-bottom:8px" id="linea_${lid}">
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto;gap:8px;align-items:end">
+    <div class="linea-row">
       <div class="field"><label>Miscela</label><select onchange="onMiscelaChange('${lid}')" id="miscela_${lid}">${opts}</select></div>
       <div class="field"><label>Scatole (${db.config.cialdePerScatola[l.miscela]||150}/sc)</label><input type="number" min="1" id="scatole_${lid}" value="${l.scatole}" onchange="updatePreview()"></div>
       <div class="field"><label>Casse Acqua</label><input type="number" min="0" id="ncasse_${lid}" value="${l.cassePagante}" onchange="updatePreview()"></div>
       <div class="field"><label>€ Scatola</label><input type="number" min="0" step="0.5" id="pscatola_${lid}" value="${pScatola}" onchange="updatePreview()"></div>
       <div class="field"><label>€ Cassa Acqua</label><input type="number" min="0" step="0.1" id="pacqua_${lid}" value="${pAcqua}" onchange="updatePreview()"></div>
-      <div style="display:flex;align-items:center;padding-bottom:2px">
+      <div class="linea-del" style="display:flex;align-items:center;padding-bottom:2px">
         <button class="btn btn-danger btn-sm" onclick="removeLinea('${lid}')">✕</button>
       </div>
     </div>
