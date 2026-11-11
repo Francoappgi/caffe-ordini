@@ -274,6 +274,23 @@ function calcolaSaldo(ordine) {
   return { esborso: totaleCosto, dovuto, dovutoOrd, dovutoInv, incassato, incassatoOrd, incassatoInv, daIncassare, saldo: incassato - totaleCosto };
 }
 
+// Imposta incassato su tutte le righe di un collega in una volta
+function toggleIncassatoCollega(ordId, idxArr, isInvenduto, checked) {
+  const ord = db.ordini.find(o=>o.id===ordId); if (!ord) return;
+  const lista = isInvenduto ? ord.quoteInvenduto : ord.quote;
+  for (const i of idxArr) { if (lista[i]) lista[i].incassato = checked; }
+  saveDB();
+  const { incassatoOrd, incassatoInv, daIncassare, saldo } = calcolaSaldo(ord);
+  const upd = { sb_incassato_ord: fmt(incassatoOrd), sb_incassato_inv: fmt(incassatoInv), sb_da_incassare: fmt(daIncassare), sb_saldo: fmt(saldo) };
+  for (const [id, val] of Object.entries(upd)) { const el=document.getElementById(id); if(el) el.textContent=val; }
+  const elDa = document.getElementById('sb_da_incassare');
+  if (elDa) elDa.style.color = daIncassare > 0.005 ? 'var(--red)' : 'var(--green)';
+  const elS = document.getElementById('sb_saldo');
+  if (elS) elS.style.color = saldo >= 0 ? 'var(--green)' : 'var(--red)';
+  // aggiorna visivamente tutte le righe del gruppo
+  renderPage();
+}
+
 function toggleIncassato(ordId, idx, isInvenduto, checked) {
   const ord = db.ordini.find(o=>o.id===ordId);
   if (!ord) return;
@@ -593,24 +610,28 @@ function pageDettaglio() {
       const righeCollega = ord.quote.map((q,i)=>({...q,i})).filter(q=>q.collega===collega);
       const totCollega = perCollegaOrd[collega] || 0;
       totaleGenerale += totCollega;
+      // il flag incassato è unico per collega: true se TUTTE le sue righe sono incassate
+      const tutteIncassate = righeCollega.every(q=>q.incassato);
+      const idxRighe = righeCollega.map(q=>q.i);
       righeCollega.forEach((q, ri) => {
         const cu = info.linee.find(l=>l.miscela===q.miscela);
         const acqua = q.acqua === true || q.acqua === 1 || q.acqua === '1';
         const costo = cu ? q.cialde * (acqua ? cu.cUnitConAcqua : cu.cUnitSenzaAcqua) : 0;
         const isLast = ri === righeCollega.length - 1;
-        html += `<tr class="${q.incassato?'incassato-si':''}">
+        // opacity sulle righe se incassato (gestito dal flag collega)
+        html += `<tr class="${tutteIncassate?'incassato-si':''}">
           <td>${ri===0 ? q.collega : ''}</td>
           <td><span class="badge ${BADGE[q.miscela]}">${EMOJI[q.miscela]} ${q.miscela}</span></td>
           <td class="text-right">${q.cialde}</td>
           <td class="text-center">${acqua?'✅':'❌'}</td>
           <td class="text-right">${fmt(costo)}</td>
           <td class="text-right text-accent" style="font-weight:${isLast?700:400}">${isLast ? fmt(totCollega) : ''}</td>
-          <td class="text-center"><input type="checkbox" class="cb-incassato" ${q.incassato?'checked':''} onchange="toggleIncassato('${ord.id}',${q.i},false,this.checked)"></td>
+          <td class="text-center">${isLast ? `<input type="checkbox" class="cb-incassato" ${tutteIncassate?'checked':''} onchange="toggleIncassatoCollega('${ord.id}',${JSON.stringify(idxRighe)},false,this.checked)">` : ''}</td>
           ${!ord.chiuso?`<td><button class="btn btn-danger btn-sm" onclick="removeQuota('${ord.id}',${q.i},false)">✕</button></td>`:''}
         </tr>`;
       });
       if (righeCollega.length > 1) {
-        html += `<tr style="border-top:1px solid var(--accent);height:4px"><td colspan="${!ord.chiuso?8:7}"></td></tr>`;
+        html += `<tr style="border-top:1px solid var(--border);height:3px"><td colspan="${!ord.chiuso?8:7}"></td></tr>`;
       }
     }
     html += `<tr style="font-weight:700;background:var(--surface2)">
@@ -621,15 +642,48 @@ function pageDettaglio() {
   }
   html += `</div>`;
 
-  html += `<div class="card"><div class="card-title">📊 Disponibilità Residua</div>
-    <div class="grid-3">`;
-  for (const miscela of MISCELE) {
-    if (disp[miscela] !== undefined) {
-      const avail = disp[miscela];
-      html += `<div class="stat-box"><div class="stat-val" style="color:${avail>0?'#ffa726':avail===0?'var(--green)':'var(--red)'}">${avail}</div><div class="stat-lbl">${EMOJI[miscela]} ${miscela}</div></div>`;
+  // ---- Tabella riepilogo per prodotto ----
+  const riepilogoMiscele = MISCELE.filter(m => info.linee.find(l=>l.miscela===m));
+  if (riepilogoMiscele.length) {
+    html += `<div class="card"><div class="card-title">📊 Riepilogo per Prodotto</div>
+      <table>
+        <thead><tr>
+          <th>Miscela</th>
+          <th class="text-right">Acquistate</th>
+          <th class="text-right">Vendute (ord.)</th>
+          <th class="text-right">Vendute (inv.)</th>
+          <th class="text-right">Tot. Vendute</th>
+          <th class="text-right" style="color:#ffa726">Invenduto</th>
+        </tr></thead>
+        <tbody>`;
+    let totAcq=0, totVOrd=0, totVInv=0, totInv=0;
+    for (const m of riepilogoMiscele) {
+      const linea = info.linee.find(l=>l.miscela===m);
+      const acquistate = linea ? linea.totCialde : 0;
+      const vendOrd = (ord.quote||[]).filter(q=>q.miscela===m).reduce((s,q)=>s+q.cialde,0);
+      const vendInv = (ord.quoteInvenduto||[]).filter(q=>q.miscela===m).reduce((s,q)=>s+q.cialde,0);
+      const totVend = vendOrd + vendInv;
+      const invenduto = acquistate - totVend;
+      totAcq+=acquistate; totVOrd+=vendOrd; totVInv+=vendInv; totInv+=invenduto;
+      html += `<tr>
+        <td><span class="badge ${BADGE[m]}">${EMOJI[m]} ${m}</span></td>
+        <td class="text-right">${acquistate}</td>
+        <td class="text-right">${vendOrd}</td>
+        <td class="text-right">${vendInv}</td>
+        <td class="text-right">${totVend}</td>
+        <td class="text-right" style="color:${invenduto>0?'#ffa726':invenduto===0?'var(--green)':'var(--red)'};font-weight:600">${invenduto}</td>
+      </tr>`;
     }
+    html += `<tr style="font-weight:700;background:var(--surface2)">
+      <td>TOTALE</td>
+      <td class="text-right">${totAcq}</td>
+      <td class="text-right">${totVOrd}</td>
+      <td class="text-right">${totVInv}</td>
+      <td class="text-right">${totVOrd+totVInv}</td>
+      <td class="text-right" style="color:${totInv>0?'#ffa726':totInv===0?'var(--green)':'var(--red)'}">${totInv}</td>
+    </tr>`;
+    html += `</tbody></table></div>`;
   }
-  html += `</div></div>`;
 
   const hasInvenduto = Object.values(disp).some(v=>v>0);
   if (hasInvenduto || ord.quoteInvenduto?.length) {
@@ -664,23 +718,28 @@ function pageDettaglio() {
         const righeCollega = ord.quoteInvenduto.map((q,i)=>({...q,i})).filter(q=>q.collega===collega);
         const totCollega = perCollegaInv[collega] || 0;
         totInvGen += totCollega;
+        const tutteIncassate = righeCollega.every(q=>q.incassato);
+        const idxRighe = righeCollega.map(q=>q.i);
         righeCollega.forEach((q, ri) => {
           const cu = info.linee.find(l=>l.miscela===q.miscela);
           const acqua = q.acqua === true || q.acqua === 1 || q.acqua === '1';
           const costoBase = cu ? q.cialde * (acqua ? cu.cUnitConAcqua : cu.cUnitSenzaAcqua) : 0;
           const costo = costoBase * (1 + magg/100);
           const isLast = ri === righeCollega.length - 1;
-          html += `<tr class="${q.incassato?'incassato-si':''}">
+          html += `<tr class="${tutteIncassate?'incassato-si':''}">
             <td>${ri===0 ? q.collega : ''}</td>
             <td><span class="badge ${BADGE[q.miscela]}">${EMOJI[q.miscela]} ${q.miscela}</span></td>
             <td class="text-right">${q.cialde}</td>
             <td class="text-center">${acqua?'✅':'❌'}</td>
             <td class="text-right">${fmt(costo)}</td>
             <td class="text-right text-accent" style="font-weight:${isLast?700:400}">${isLast ? fmt(totCollega) : ''}</td>
-            <td class="text-center"><input type="checkbox" class="cb-incassato" ${q.incassato?'checked':''} onchange="toggleIncassato('${ord.id}',${q.i},true,this.checked)"></td>
+            <td class="text-center">${isLast ? `<input type="checkbox" class="cb-incassato" ${tutteIncassate?'checked':''} onchange="toggleIncassatoCollega('${ord.id}',${JSON.stringify(idxRighe)},true,this.checked)">` : ''}</td>
             ${!ord.chiuso?`<td><button class="btn btn-danger btn-sm" onclick="removeQuota('${ord.id}',${q.i},true)">✕</button></td>`:''}
           </tr>`;
         });
+        if (righeCollega.length > 1) {
+          html += `<tr style="border-top:1px solid var(--border);height:3px"><td colspan="${!ord.chiuso?8:7}"></td></tr>`;
+        }
       }
       html += `<tr style="font-weight:700;background:var(--surface2)">
         <td>TOTALE</td><td></td><td class="text-right">${ord.quoteInvenduto.reduce((s,q)=>s+q.cialde,0)}</td>
