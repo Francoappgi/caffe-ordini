@@ -212,13 +212,11 @@ function calcolaMagazzino(ordId) {
   const haVendMaggC = Object.values(vendMaggC).some(v => v > 0);
 
   // Se ci sono vendite a magg sull'ordine corrente, mostra anche riga "da magazzino precedente"
-  if (haVendMaggC && Object.values(magAccumulato).some(v => v > 0)) {
-    // riga sintetica magazzino precedente da cui si attinge
+  if (haVendMaggC) {
+    // riga sintetica: mostra il totale magazzino accumulato, le vendite a magg. e il residuo
     const magLordo = { ...magAccumulato };
-    const noVend = {};
-    for (const m of MISCELE) noVend[m] = 0;
     const magResiduo = {};
-    for (const m of MISCELE) magResiduo[m] = magAccumulato[m] - (vendMaggC[m] || 0);
+    for (const m of MISCELE) magResiduo[m] = (magAccumulato[m] || 0) - (vendMaggC[m] || 0);
     righe.push({ ordId: 'mag_prec', data: '', note: 'Magazzino precedente', lordo: magLordo, vendMagg: vendMaggC, residuo: magResiduo, haVendMagg: true, isCorrente: false, isMagPrec: true });
   }
 
@@ -757,13 +755,9 @@ function pageDettaglio() {
   // ---- SEZIONE MAGAZZINO ----
   const righeMag = calcolaMagazzino(ord.id);
   if (righeMag.length > 0) {
-    // totale residuo finale per miscela
-    const totMag = {};
-    for (const m of MISCELE) totMag[m] = 0;
-    for (const r of righeMag) {
-      for (const m of MISCELE) totMag[m] += Math.max(0, r.residuo[m] || 0);
-    }
-    const totMagTot = MISCELE.reduce((s,m) => s + totMag[m], 0);
+    // totale magazzino = disponibilità reale (già calcolata correttamente)
+    const totMag = calcolaDisponibilitaOrdine(ord);
+    const totMagTot = MISCELE.reduce((s,m) => s + Math.max(0, totMag[m] || 0), 0);
 
     if (totMagTot > 0 || righeMag.some(r => r.isCorrente)) {
       html += `<div class="card"><div class="card-title">🏪 Magazzino Invenduto</div>
