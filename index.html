@@ -142,7 +142,8 @@ function defaultDB() {
       prezzi: { CLASSICO: 22, DECA: 25, ORO: 24 },
       prezzoAcqua: 3.5,
       cialdePerScatola: { CLASSICO: 150, DECA: 150, ORO: 150 },
-      maggiorazioneInvenduto: 20
+      maggiorazioneInvenduto: 20,
+      scorteIniziali: { CLASSICO: 0, DECA: 0, ORO: 0 }
     },
     colleghi: ['Franco (Casa)', 'Franco', 'Maria Sole', 'Anna', 'Eleonora', 'Teresa', 'Sara', 'Simona', 'Rosaria'],
     ordini: []
@@ -161,66 +162,42 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6
 const MISCELE = ['CLASSICO', 'DECA', 'ORO'];
 
 // Ritorna array di righe per il magazzino.
-// Ogni riga mostra: invenduto lordo dell'ordine (acquistato - venduto normale),
-// venduto a maggiorazione registrato SU quell'ordine, residuo.
-// Le quoteInvenduto dell'ordine corrente scalano dal magazzino accumulato.
+// Una riga per ordine: acquistato, venduto normale, venduto a magg, residuo.
+// Le quoteInvenduto sono SEMPRE sull'ordine su cui vengono registrate.
 function calcolaMagazzino(ordId) {
   const tuttiOrdini = [...db.ordini].sort((a,b) => a.data.localeCompare(b.data));
   const idxCorrente = tuttiOrdini.findIndex(o => o.id === ordId);
   if (idxCorrente < 0) return [];
 
-  // Prima passata: calcola invenduto lordo di ogni ordine precedente
-  // (acquistato - venduto quote normali), senza considerare le quoteInvenduto
-  // che vengono registrate sull'ordine corrente.
   const righe = [];
-  // magazzino accumulato dai precedenti (prima dell'ordine corrente)
-  const magAccumulato = {};
-  for (const m of MISCELE) magAccumulato[m] = 0;
 
-  for (let i = 0; i < idxCorrente; i++) {
+  // Riga scorte iniziali (se almeno una > 0)
+  const scorte = db.config.scorteIniziali || {};
+  if (MISCELE.some(m => (scorte[m] || 0) > 0)) {
+    const acq = {};
+    for (const m of MISCELE) acq[m] = scorte[m] || 0;
+    righe.push({ ordId: 'scorte_iniziali', data: '', note: 'Scorte iniziali', acquistato: acq,
+      vendNorm: {}, vendMagg: {}, residuo: { ...acq }, haVendMagg: false, isCorrente: false, isScorteIniziali: true });
+  }
+
+  for (let i = 0; i <= idxCorrente; i++) {
     const o = tuttiOrdini[i];
     const info = calcolaOrdine(o);
-    const lordo = {};
-    for (const l of info.linee) lordo[l.miscela] = l.totCialde;
-    for (const q of (o.quote || [])) lordo[q.miscela] = (lordo[q.miscela] || 0) - q.cialde;
-    // venduto a magg registrato su questo ordine passato
+    const acquistato = {};
+    for (const l of info.linee) acquistato[l.miscela] = l.totCialde;
+    const vendNorm = {};
+    for (const q of (o.quote || [])) vendNorm[q.miscela] = (vendNorm[q.miscela] || 0) + q.cialde;
     const vendMagg = {};
     for (const q of (o.quoteInvenduto || [])) vendMagg[q.miscela] = (vendMagg[q.miscela] || 0) + q.cialde;
     const residuo = {};
-    for (const m of MISCELE) {
-      residuo[m] = (lordo[m] || 0) - (vendMagg[m] || 0);
-      magAccumulato[m] += residuo[m];
-    }
-    const haLordo = Object.values(lordo).some(v => v > 0);
-    const haVendMagg = Object.values(vendMagg).some(v => v > 0);
-    if (haLordo || haVendMagg) {
-      righe.push({ ordId: o.id, data: o.data, note: o.note, lordo, vendMagg, residuo, haVendMagg, isCorrente: false });
+    for (const m of MISCELE) residuo[m] = (acquistato[m] || 0) - (vendNorm[m] || 0) - (vendMagg[m] || 0);
+
+    const haQualcosa = Object.values(acquistato).some(v=>v>0) || Object.values(vendMagg).some(v=>v>0);
+    if (haQualcosa) {
+      righe.push({ ordId: o.id, data: o.data, note: o.note, acquistato, vendNorm, vendMagg, residuo,
+        haVendMagg: Object.values(vendMagg).some(v=>v>0), isCorrente: i === idxCorrente });
     }
   }
-
-  // Riga ordine corrente: lordo = invenduto ordine corrente,
-  // vendMagg = quoteInvenduto registrate sull'ordine corrente (scalano dal magazzino)
-  const oc = tuttiOrdini[idxCorrente];
-  const infoC = calcolaOrdine(oc);
-  const lordoC = {};
-  for (const l of infoC.linee) lordoC[l.miscela] = l.totCialde;
-  for (const q of (oc.quote || [])) lordoC[q.miscela] = (lordoC[q.miscela] || 0) - q.cialde;
-  const vendMaggC = {};
-  for (const q of (oc.quoteInvenduto || [])) vendMaggC[q.miscela] = (vendMaggC[q.miscela] || 0) + q.cialde;
-  const residuoC = {};
-  for (const m of MISCELE) residuoC[m] = (lordoC[m] || 0) - (vendMaggC[m] || 0);
-  const haVendMaggC = Object.values(vendMaggC).some(v => v > 0);
-
-  // Se ci sono vendite a magg sull'ordine corrente, mostra anche riga "da magazzino precedente"
-  if (haVendMaggC) {
-    // riga sintetica: mostra il totale magazzino accumulato, le vendite a magg. e il residuo
-    const magLordo = { ...magAccumulato };
-    const magResiduo = {};
-    for (const m of MISCELE) magResiduo[m] = (magAccumulato[m] || 0) - (vendMaggC[m] || 0);
-    righe.push({ ordId: 'mag_prec', data: '', note: 'Magazzino precedente', lordo: magLordo, vendMagg: vendMaggC, residuo: magResiduo, haVendMagg: true, isCorrente: false, isMagPrec: true });
-  }
-
-  righe.push({ ordId: oc.id, data: oc.data, note: oc.note, lordo: lordoC, vendMagg: {}, residuo: lordoC, haVendMagg: false, isCorrente: true });
   return righe;
 }
 const BADGE = { CLASSICO: 'badge-classico', DECA: 'badge-deca', ORO: 'badge-oro' };
@@ -297,11 +274,11 @@ function calcolaQuoteOrdine(ordine) {
 }
 
 function calcolaDisponibilitaOrdine(ordine) {
-  // Disponibilità per vendita invenduto = magazzino totale accumulato da tutti gli ordini
-  // (incluso corrente), meno tutto il venduto (quote normali + quoteInvenduto).
+  // Disponibilità per vendita invenduto = scorte iniziali + acquistato - venduto
   const tuttiOrdini = [...db.ordini].sort((a,b) => a.data.localeCompare(b.data));
   const result = {};
-  for (const m of MISCELE) result[m] = 0;
+  const scorte = db.config.scorteIniziali || {};
+  for (const m of MISCELE) result[m] = scorte[m] || 0;
 
   for (const o of tuttiOrdini) {
     const info = calcolaOrdine(o);
@@ -768,19 +745,19 @@ function pageDettaglio() {
           </tr></thead>
           <tbody>`;
       for (const r of righeMag) {
-        const bordoTop = r.isCorrente ? 'border-top:2px solid var(--accent);' : (r.isMagPrec ? 'border-top:1px dashed var(--border);' : '');
-        const bgCorrente = r.isCorrente ? 'background:var(--surface2);' : '';
+        const bordoTop = r.isCorrente ? 'border-top:2px solid var(--accent);' : (r.isScorteIniziali ? '' : '');
+        const bgCorrente = r.isCorrente ? 'background:var(--surface2);' : (r.isScorteIniziali ? 'background:rgba(66,165,245,.07);' : '');
         const label = r.isCorrente
           ? `<strong style="color:var(--accent2)">Ordine corrente</strong>${r.note ? ' — '+r.note : ''}`
-          : r.isMagPrec
-            ? `<em style="color:var(--text2)">📦 ${r.note}</em>`
+          : r.isScorteIniziali
+            ? `<em style="color:var(--blue)">🗄️ ${r.note}</em>`
             : `Ordine del ${r.data}${r.note ? ' — '+r.note : ''}`;
 
-        // riga invenduto lordo
+        // riga acquistato/scorte
         html += `<tr style="${bordoTop}${bgCorrente}">
           <td>${label}</td>
           ${MISCELE.map(m => {
-            const v = r.lordo[m] || 0;
+            const v = (r.acquistato || r.lordo || {})[m] || 0;
             const color = v > 0 ? '#ffa726' : 'var(--text3)';
             return `<td class="text-right" style="color:${color};font-weight:${v>0?600:400}">${v > 0 ? v : '—'}</td>`;
           }).join('')}
@@ -927,6 +904,14 @@ function pageConfig() {
     <div class="grid-2">
       <div class="field"><label>💧 Prezzo Cassa Acqua (€)</label><input type="number" min="0" step="0.1" id="cfg_acqua" value="${prezzoAcqua}"></div>
       <div class="field"><label>🏷️ Maggiorazione Invenduto (%)</label><input type="number" min="0" id="cfg_magg" value="${maggiorazioneInvenduto}"></div>
+    </div>
+    <hr class="sep">
+    <div class="card-title" style="margin-top:4px">🗄️ Scorte Iniziali (cialde già in magazzino prima del primo ordine)</div>
+    <div class="grid-3">
+      ${MISCELE.map(m=>`<div class="field">
+        <label>${EMOJI[m]} Scorte iniziali ${m}</label>
+        <input type="number" min="0" step="1" id="cfg_scorte_${m}" value="${(db.config.scorteIniziali||{})[m]||0}">
+      </div>`).join('')}
     </div>
     <hr class="sep">
     <div class="row" style="justify-content:flex-end">
@@ -1084,9 +1069,11 @@ function removeCollega(idx) {
 }
 
 function salvaConfig() {
+  if (!db.config.scorteIniziali) db.config.scorteIniziali = {};
   for (const m of MISCELE) {
     db.config.prezzi[m] = parseFloat(document.getElementById('cfg_prezzo_'+m)?.value||0);
     db.config.cialdePerScatola[m] = parseInt(document.getElementById('cfg_cialde_'+m)?.value||150);
+    db.config.scorteIniziali[m] = parseInt(document.getElementById('cfg_scorte_'+m)?.value||0);
   }
   db.config.prezzoAcqua = parseFloat(document.getElementById('cfg_acqua')?.value||0);
   db.config.maggiorazioneInvenduto = parseFloat(document.getElementById('cfg_magg')?.value||20);
