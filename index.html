@@ -159,6 +159,31 @@ const fmtN = (n, d=2) => (+(n||0)).toFixed(d).replace('.', ',');
 const fmtPcs = n => Math.round(n||0);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 const MISCELE = ['CLASSICO', 'DECA', 'ORO'];
+
+// Ritorna array { ordId, data, note, invenduto: {miscela: cialde} } per tutti gli ordini
+// precedenti a ordId che hanno invenduto > 0, più l'ordine corrente stesso.
+function calcolaMagazzino(ordId) {
+  // ordini ordinati per data
+  const tuttiOrdini = [...db.ordini].sort((a,b) => a.data.localeCompare(b.data));
+  const idxCorrente = tuttiOrdini.findIndex(o => o.id === ordId);
+  if (idxCorrente < 0) return [];
+
+  const righe = [];
+  for (let i = 0; i <= idxCorrente; i++) {
+    const o = tuttiOrdini[i];
+    const info = calcolaOrdine(o);
+    const inv = {};
+    for (const l of info.linee) inv[l.miscela] = l.totCialde;
+    for (const q of (o.quote || [])) { inv[q.miscela] = (inv[q.miscela] || 0) - q.cialde; }
+    for (const q of (o.quoteInvenduto || [])) { inv[q.miscela] = (inv[q.miscela] || 0) - q.cialde; }
+    // include solo se ha almeno una miscela con invenduto > 0
+    const haInv = Object.values(inv).some(v => v > 0);
+    if (haInv || i === idxCorrente) {
+      righe.push({ ordId: o.id, data: o.data, note: o.note, invenduto: inv, isCorrente: i === idxCorrente });
+    }
+  }
+  return righe;
+}
 const BADGE = { CLASSICO: 'badge-classico', DECA: 'badge-deca', ORO: 'badge-oro' };
 const EMOJI = { CLASSICO: '☕', DECA: '🍵', ORO: '✨' };
 
@@ -684,6 +709,51 @@ function pageDettaglio() {
       <td class="text-right" style="color:${totInv>0?'#ffa726':totInv===0?'var(--green)':'var(--red)'}">${totInv}</td>
     </tr>`;
     html += `</tbody></table></div>`;
+  }
+
+  // ---- SEZIONE MAGAZZINO ----
+  const righeMag = calcolaMagazzino(ord.id);
+  if (righeMag.length > 0) {
+    const miscelePresenti = [...new Set(righeMag.flatMap(r => Object.keys(r.invenduto).filter(m => r.invenduto[m] > 0)))];
+    // totali per miscela su tutti gli ordini precedenti (escluso corrente)
+    const totMag = {};
+    for (const m of MISCELE) totMag[m] = 0;
+    for (const r of righeMag) {
+      for (const m of MISCELE) totMag[m] += Math.max(0, r.invenduto[m] || 0);
+    }
+    const totMagTot = MISCELE.reduce((s,m) => s + totMag[m], 0);
+
+    if (totMagTot > 0 || righeMag.some(r => r.isCorrente)) {
+      html += `<div class="card"><div class="card-title">🏪 Magazzino Invenduto</div>
+        <table>
+          <thead><tr>
+            <th>Ordine</th>
+            ${MISCELE.map(m=>`<th class="text-right"><span class="badge ${BADGE[m]}">${EMOJI[m]} ${m}</span></th>`).join('')}
+          </tr></thead>
+          <tbody>`;
+      for (const r of righeMag) {
+        const label = r.isCorrente
+          ? `<strong style="color:var(--accent2)">Ordine corrente</strong>${r.note ? ' — '+r.note : ''}`
+          : `Ordine del ${r.data}${r.note ? ' — '+r.note : ''}`;
+        const style = r.isCorrente ? 'border-top:2px solid var(--accent);background:var(--surface2)' : '';
+        html += `<tr style="${style}">
+          <td>${label}</td>
+          ${MISCELE.map(m => {
+            const v = r.invenduto[m] || 0;
+            const color = v > 0 ? '#ffa726' : v === 0 ? 'var(--text3)' : 'var(--red)';
+            return `<td class="text-right" style="color:${color};font-weight:${v>0?600:400}">${v > 0 ? v : (v < 0 ? '⚠️ '+v : '—')}</td>`;
+          }).join('')}
+        </tr>`;
+      }
+      html += `<tr style="font-weight:700;background:var(--surface2);border-top:2px solid var(--border)">
+        <td>TOTALE MAGAZZINO</td>
+        ${MISCELE.map(m => {
+          const v = totMag[m];
+          return `<td class="text-right" style="color:${v>0?'#ffa726':'var(--text3)'}">${v > 0 ? v : '—'}</td>`;
+        }).join('')}
+      </tr>`;
+      html += `</tbody></table></div>`;
+    }
   }
 
   const hasInvenduto = Object.values(disp).some(v=>v>0);
