@@ -953,8 +953,17 @@ function attachEvents() {
 // ---- sincronizzazione cialde <-> importo nel form quota ----
 function getCostoUnitQuota(ordId, miscela, acqua, isInvenduto) {
   const ord = db.ordini.find(o=>o.id===ordId); if (!ord) return 0;
-  const info = calcolaOrdine(ord);
-  const linea = info.linee.find(l=>l.miscela===miscela); if (!linea) return 0;
+  // Cerca il prezzo unitario nell'ordine corrente; se la miscela non c'è
+  // (vendita invenduto da magazzino), cerca nell'ordine più recente che la contiene.
+  let linea = calcolaOrdine(ord).linee.find(l=>l.miscela===miscela);
+  if (!linea && isInvenduto) {
+    const tuttiOrdini = [...db.ordini].sort((a,b) => b.data.localeCompare(a.data));
+    for (const o of tuttiOrdini) {
+      linea = calcolaOrdine(o).linee.find(l=>l.miscela===miscela);
+      if (linea) break;
+    }
+  }
+  if (!linea) return 0;
   const cu = acqua ? linea.cUnitConAcqua : linea.cUnitSenzaAcqua;
   if (isInvenduto) return cu * (1 + (ord.maggiorazione ?? db.config.maggiorazioneInvenduto) / 100);
   return cu;
@@ -1001,7 +1010,7 @@ function addQuota(ordId, isInvenduto) {
   } else {
     cialde = parseInt(document.getElementById(prefix+'_cialde')?.value||0);
   }
-  if (!collega || !miscela || cialde<=0) { alert('Compila tutti i campi'); return; }
+  if (!collega || !miscela || !cialde || cialde<=0 || !isFinite(cialde)) { alert('Compila tutti i campi'); return; }
 
   if (isInvenduto) {
     const disp = calcolaDisponibilitaOrdine(ord);
