@@ -916,6 +916,7 @@ function editOrdine(id) {
   const el = document.getElementById('mainContent');
   el.innerHTML = pageNuovoOrdine(id);
   attachEvents();
+  updatePreview();
 }
 
 function eliminaOrdine(id) {
