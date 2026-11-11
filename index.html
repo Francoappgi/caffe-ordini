@@ -173,14 +173,15 @@ function costoUnitario(miscela, includeAcqua, linea) {
 function calcolaOrdine(ordine) {
   let result = { linee: [], totaleCialde: 0, totaleCosto: 0, totaleAcqua: 0, totaleScatole: 0, spedizione: ordine.spedizione || 0 };
   for (const l of ordine.linee) {
-    const cCon = costoUnitario(l.miscela, true, l);
-    const cSenza = costoUnitario(l.miscela, false, l);
     const cialde = db.config.cialdePerScatola[l.miscela] || 150;
     const totCialde = l.scatole * cialde;
     const prezzoAcqua = l.prezzoAcqua ?? db.config.prezzoAcqua;
     const prezzoScatola = l.prezzoScatola ?? db.config.prezzi[l.miscela];
     const costoAcqua = l.cassePagante * prezzoAcqua;
     const costoBase = l.scatole * prezzoScatola;
+    // costo unitario = (costo reale linea) / cialde totali linea
+    const cCon = totCialde > 0 ? (costoBase + costoAcqua) / totCialde : 0;
+    const cSenza = totCialde > 0 ? costoBase / totCialde : 0;
     result.linee.push({ ...l, totCialde, costoBase, costoAcqua, cUnitConAcqua: cCon, cUnitSenzaAcqua: cSenza, prezzoScatola, prezzoAcqua });
     result.totaleCialde += totCialde;
     result.totaleCosto += costoBase + costoAcqua;
