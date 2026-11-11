@@ -571,13 +571,14 @@ function pageDettaglio() {
         <div class="field"><label>Collega</label><select id="q_collega">
           ${db.colleghi.map(c=>`<option>${c}</option>`).join('')}
         </select></div>
-        <div class="field"><label>Miscela</label><select id="q_miscela">
+        <div class="field"><label>Miscela</label><select id="q_miscela" onchange="syncQuotaCialde('q','${ord.id}')">
           ${info.linee.map(l=>`<option value="${l.miscela}">${EMOJI[l.miscela]} ${l.miscela}</option>`).join('')}
         </select></div>
-        <div class="field"><label>N° Cialde</label><input type="number" min="1" id="q_cialde" value="30"></div>
         <div class="field"><label>Include Acqua?</label>
-          <select id="q_acqua"><option value="1">✅ Sì</option><option value="0">❌ No</option></select>
+          <select id="q_acqua" onchange="syncQuotaCialde('q','${ord.id}')"><option value="1">✅ Sì</option><option value="0">❌ No</option></select>
         </div>
+        <div class="field"><label>N° Cialde</label><input type="number" min="1" id="q_cialde" value="30" oninput="syncQuotaImporto('q','${ord.id}')"></div>
+        <div class="field"><label>€ Importo</label><input type="number" min="0" step="0.01" id="q_importo" value="" placeholder="auto" oninput="syncQuotaCialdeFromImporto('q','${ord.id}')"></div>
       </div>
       <button class="btn btn-primary btn-sm" onclick="addQuota('${ord.id}', false)">+ Aggiungi Quota</button>
     </div><br>`;
@@ -643,13 +644,14 @@ function pageDettaglio() {
         <div class="field"><label>Collega</label><select id="qi_collega">
           ${db.colleghi.map(c=>`<option>${c}</option>`).join('')}
         </select></div>
-        <div class="field"><label>Miscela (disponibile)</label><select id="qi_miscela">
+        <div class="field"><label>Miscela (disponibile)</label><select id="qi_miscela" onchange="syncQuotaCialde('qi','${ord.id}',true)">
           ${MISCELE.filter(m=>(disp[m]||0)>0).map(m=>`<option value="${m}">${EMOJI[m]} ${m} (${disp[m]} rimanenti)</option>`).join('')}
         </select></div>
-        <div class="field"><label>N° Cialde</label><input type="number" min="1" id="qi_cialde" value="10"></div>
         <div class="field"><label>Include Acqua?</label>
-          <select id="qi_acqua"><option value="1">✅ Sì</option><option value="0">❌ No</option></select>
+          <select id="qi_acqua" onchange="syncQuotaCialde('qi','${ord.id}',true)"><option value="1">✅ Sì</option><option value="0">❌ No</option></select>
         </div>
+        <div class="field"><label>N° Cialde</label><input type="number" min="1" id="qi_cialde" value="10" oninput="syncQuotaImporto('qi','${ord.id}',true)"></div>
+        <div class="field"><label>€ Importo</label><input type="number" min="0" step="0.01" id="qi_importo" value="" placeholder="auto" oninput="syncQuotaCialdeFromImporto('qi','${ord.id}',true)"></div>
       </div>
       <button class="btn btn-primary btn-sm" onclick="addQuota('${ord.id}', true)">+ Vendi a maggiorazione</button><br><br>`;
     }
@@ -757,14 +759,57 @@ function attachEvents() {
   if (currentPage === 'nuovo') setTimeout(updatePreview, 50);
 }
 
+// ---- sincronizzazione cialde <-> importo nel form quota ----
+function getCostoUnitQuota(ordId, miscela, acqua, isInvenduto) {
+  const ord = db.ordini.find(o=>o.id===ordId); if (!ord) return 0;
+  const info = calcolaOrdine(ord);
+  const linea = info.linee.find(l=>l.miscela===miscela); if (!linea) return 0;
+  const cu = acqua ? linea.cUnitConAcqua : linea.cUnitSenzaAcqua;
+  if (isInvenduto) return cu * (1 + (ord.maggiorazione ?? db.config.maggiorazioneInvenduto) / 100);
+  return cu;
+}
+
+function syncQuotaImporto(prefix, ordId, isInvenduto=false) {
+  const miscela = document.getElementById(prefix+'_miscela')?.value;
+  const acqua = document.getElementById(prefix+'_acqua')?.value === '1';
+  const cialde = parseFloat(document.getElementById(prefix+'_cialde')?.value||0);
+  const cu = getCostoUnitQuota(ordId, miscela, acqua, isInvenduto);
+  const impEl = document.getElementById(prefix+'_importo');
+  if (impEl && cialde > 0 && cu > 0) impEl.value = (cialde * cu).toFixed(2);
+  else if (impEl) impEl.value = '';
+}
+
+function syncQuotaCialdeFromImporto(prefix, ordId, isInvenduto=false) {
+  const miscela = document.getElementById(prefix+'_miscela')?.value;
+  const acqua = document.getElementById(prefix+'_acqua')?.value === '1';
+  const importo = parseFloat(document.getElementById(prefix+'_importo')?.value||0);
+  const cu = getCostoUnitQuota(ordId, miscela, acqua, isInvenduto);
+  const cialdeEl = document.getElementById(prefix+'_cialde');
+  if (cialdeEl && importo > 0 && cu > 0) cialdeEl.value = Math.round(importo / cu);
+  else if (cialdeEl && importo === 0) cialdeEl.value = '';
+}
+
+function syncQuotaCialde(prefix, ordId, isInvenduto=false) {
+  // ricalcola importo quando cambia miscela o acqua
+  syncQuotaImporto(prefix, ordId, isInvenduto);
+}
+
 function addQuota(ordId, isInvenduto) {
   const ord = db.ordini.find(o=>o.id===ordId);
   if (!ord) return;
   const prefix = isInvenduto ? 'qi' : 'q';
   const collega = document.getElementById(prefix+'_collega')?.value;
   const miscela = document.getElementById(prefix+'_miscela')?.value;
-  const cialde = parseInt(document.getElementById(prefix+'_cialde')?.value||0);
   const acqua = document.getElementById(prefix+'_acqua')?.value === '1';
+  // se c'è importo, ricalcola cialde da importo
+  const importoVal = parseFloat(document.getElementById(prefix+'_importo')?.value||0);
+  let cialde;
+  if (importoVal > 0) {
+    const cu = getCostoUnitQuota(ordId, miscela, acqua, isInvenduto);
+    cialde = cu > 0 ? Math.round(importoVal / cu) : parseInt(document.getElementById(prefix+'_cialde')?.value||0);
+  } else {
+    cialde = parseInt(document.getElementById(prefix+'_cialde')?.value||0);
+  }
   if (!collega || !miscela || cialde<=0) { alert('Compila tutti i campi'); return; }
 
   if (isInvenduto) {
