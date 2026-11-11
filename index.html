@@ -160,10 +160,8 @@ const fmtPcs = n => Math.round(n||0);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 const MISCELE = ['CLASSICO', 'DECA', 'ORO'];
 
-// Ritorna array { ordId, data, note, invenduto: {miscela: cialde} } per tutti gli ordini
-// precedenti a ordId che hanno invenduto > 0, più l'ordine corrente stesso.
+// Ritorna array di righe per il magazzino (invenduto lordo + vendite a magg. + residuo)
 function calcolaMagazzino(ordId) {
-  // ordini ordinati per data
   const tuttiOrdini = [...db.ordini].sort((a,b) => a.data.localeCompare(b.data));
   const idxCorrente = tuttiOrdini.findIndex(o => o.id === ordId);
   if (idxCorrente < 0) return [];
@@ -172,14 +170,21 @@ function calcolaMagazzino(ordId) {
   for (let i = 0; i <= idxCorrente; i++) {
     const o = tuttiOrdini[i];
     const info = calcolaOrdine(o);
-    const inv = {};
-    for (const l of info.linee) inv[l.miscela] = l.totCialde;
-    for (const q of (o.quote || [])) { inv[q.miscela] = (inv[q.miscela] || 0) - q.cialde; }
-    for (const q of (o.quoteInvenduto || [])) { inv[q.miscela] = (inv[q.miscela] || 0) - q.cialde; }
-    // include solo se ha almeno una miscela con invenduto > 0
-    const haInv = Object.values(inv).some(v => v > 0);
-    if (haInv || i === idxCorrente) {
-      righe.push({ ordId: o.id, data: o.data, note: o.note, invenduto: inv, isCorrente: i === idxCorrente });
+    // invenduto lordo = acquistato - venduto ordine
+    const lordo = {};
+    for (const l of info.linee) lordo[l.miscela] = l.totCialde;
+    for (const q of (o.quote || [])) { lordo[q.miscela] = (lordo[q.miscela] || 0) - q.cialde; }
+    // venduto a maggiorazione
+    const vendMagg = {};
+    for (const q of (o.quoteInvenduto || [])) { vendMagg[q.miscela] = (vendMagg[q.miscela] || 0) + q.cialde; }
+    // residuo = lordo - venduto a magg
+    const residuo = {};
+    for (const m of MISCELE) residuo[m] = (lordo[m] || 0) - (vendMagg[m] || 0);
+
+    const haLordo = Object.values(lordo).some(v => v > 0);
+    const haVendMagg = Object.values(vendMagg).some(v => v > 0);
+    if (haLordo || i === idxCorrente) {
+      righe.push({ ordId: o.id, data: o.data, note: o.note, lordo, vendMagg, residuo, haVendMagg, isCorrente: i === idxCorrente });
     }
   }
   return righe;
@@ -714,12 +719,11 @@ function pageDettaglio() {
   // ---- SEZIONE MAGAZZINO ----
   const righeMag = calcolaMagazzino(ord.id);
   if (righeMag.length > 0) {
-    const miscelePresenti = [...new Set(righeMag.flatMap(r => Object.keys(r.invenduto).filter(m => r.invenduto[m] > 0)))];
-    // totali per miscela su tutti gli ordini precedenti (escluso corrente)
+    // totale residuo finale per miscela
     const totMag = {};
     for (const m of MISCELE) totMag[m] = 0;
     for (const r of righeMag) {
-      for (const m of MISCELE) totMag[m] += Math.max(0, r.invenduto[m] || 0);
+      for (const m of MISCELE) totMag[m] += Math.max(0, r.residuo[m] || 0);
     }
     const totMagTot = MISCELE.reduce((s,m) => s + totMag[m], 0);
 
@@ -732,18 +736,41 @@ function pageDettaglio() {
           </tr></thead>
           <tbody>`;
       for (const r of righeMag) {
+        const bordoTop = r.isCorrente ? 'border-top:2px solid var(--accent);' : '';
+        const bgCorrente = r.isCorrente ? 'background:var(--surface2);' : '';
         const label = r.isCorrente
           ? `<strong style="color:var(--accent2)">Ordine corrente</strong>${r.note ? ' — '+r.note : ''}`
           : `Ordine del ${r.data}${r.note ? ' — '+r.note : ''}`;
-        const style = r.isCorrente ? 'border-top:2px solid var(--accent);background:var(--surface2)' : '';
-        html += `<tr style="${style}">
+
+        // riga invenduto lordo
+        html += `<tr style="${bordoTop}${bgCorrente}">
           <td>${label}</td>
           ${MISCELE.map(m => {
-            const v = r.invenduto[m] || 0;
-            const color = v > 0 ? '#ffa726' : v === 0 ? 'var(--text3)' : 'var(--red)';
-            return `<td class="text-right" style="color:${color};font-weight:${v>0?600:400}">${v > 0 ? v : (v < 0 ? '⚠️ '+v : '—')}</td>`;
+            const v = r.lordo[m] || 0;
+            const color = v > 0 ? '#ffa726' : 'var(--text3)';
+            return `<td class="text-right" style="color:${color};font-weight:${v>0?600:400}">${v > 0 ? v : '—'}</td>`;
           }).join('')}
         </tr>`;
+
+        // riga venduto a maggiorazione (solo se presente)
+        if (r.haVendMagg) {
+          html += `<tr style="${bgCorrente}opacity:0.75">
+            <td style="padding-left:20px;color:var(--text2);font-size:0.85rem">↳ venduto a magg.</td>
+            ${MISCELE.map(m => {
+              const v = r.vendMagg[m] || 0;
+              return `<td class="text-right" style="color:var(--green);font-size:0.85rem">${v > 0 ? '−'+v : '—'}</td>`;
+            }).join('')}
+          </tr>`;
+          // riga residuo
+          html += `<tr style="${bgCorrente}border-bottom:1px solid var(--border)">
+            <td style="padding-left:20px;color:var(--text2);font-size:0.85rem">↳ residuo</td>
+            ${MISCELE.map(m => {
+              const v = r.residuo[m] || 0;
+              const color = v > 0 ? '#ffa726' : v < 0 ? 'var(--red)' : 'var(--text3)';
+              return `<td class="text-right" style="color:${color};font-weight:${v>0?600:400};font-size:0.85rem">${v > 0 ? v : (v < 0 ? '⚠️ '+v : '—')}</td>`;
+            }).join('')}
+          </tr>`;
+        }
       }
       html += `<tr style="font-weight:700;background:var(--surface2);border-top:2px solid var(--border)">
         <td>TOTALE MAGAZZINO</td>
