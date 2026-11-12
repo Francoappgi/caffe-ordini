@@ -117,6 +117,7 @@
     <h1>Gestione Ordini Caffè</h1>
     <div class="subtitle">Cialde, acqua e quote colleghi</div>
   </div>
+  <div id="syncStatus" style="margin-left:auto;font-size:0.78rem;color:var(--text3)">⏳ sync…</div>
 </div>
 
 <div class="nav" id="navBar">
@@ -129,13 +130,103 @@
 <div class="main" id="mainContent"></div>
 
 <script>
+// ===================== FIREBASE / FIRESTORE =====================
+const FB_API_KEY  = 'AIzaSyBtyF1boI3Lrar57On1JMn_WDm6XBXlAww';
+const FB_PROJECT  = 'contacaffe-7613c';
+const FS_BASE     = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents`;
+const FS_COL      = 'caffe-ordini';
+const FS_DOC      = 'main';
+const AUTH_BASE   = `https://identitytoolkit.googleapis.com/v1`;
+
+let _fbToken = null;
+let _fbTokenExpiry = 0;
+
+async function getFbToken() {
+  if (_fbToken && Date.now() < _fbTokenExpiry - 60000) return _fbToken;
+  // Sign in anonymously
+  try {
+    const r = await fetch(`${AUTH_BASE}/accounts:signUp?key=${FB_API_KEY}`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ returnSecureToken: true })
+    });
+    const j = await r.json();
+    if (j.idToken) {
+      _fbToken = j.idToken;
+      _fbTokenExpiry = Date.now() + (parseInt(j.expiresIn||3600) * 1000);
+      return _fbToken;
+    }
+  } catch(e) { console.warn('getFbToken error', e); }
+  return null;
+}
+
+// ---- Firestore value helpers (REST) ----
+function fsVal(v) {
+  if (v === null || v === undefined) return { nullValue: null };
+  if (typeof v === 'boolean') return { booleanValue: v };
+  if (typeof v === 'number') return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+  if (Array.isArray(v)) return { arrayValue: { values: v.map(fsVal) } };
+  if (typeof v === 'object') return { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k,val]) => [k, fsVal(val)])) } };
+  return { stringValue: String(v) };
+}
+function fromFsVal(v) {
+  if (!v) return null;
+  if ('stringValue'  in v) return v.stringValue;
+  if ('booleanValue' in v) return v.booleanValue;
+  if ('integerValue' in v) return parseInt(v.integerValue);
+  if ('doubleValue'  in v) return v.doubleValue;
+  if ('nullValue'    in v) return null;
+  if ('timestampValue' in v) return v.timestampValue;
+  if ('arrayValue'   in v) return (v.arrayValue.values || []).map(fromFsVal);
+  if ('mapValue'     in v) return fromFsFields(v.mapValue.fields || {});
+  return null;
+}
+function fromFsFields(fields) {
+  return Object.fromEntries(Object.entries(fields || {}).map(([k,v]) => [k, fromFsVal(v)]));
+}
+
+async function fsLoad() {
+  try {
+    const tok = await getFbToken();
+    const headers = tok ? { Authorization: `Bearer ${tok}` } : {};
+    const r = await fetch(`${FS_BASE}/${FS_COL}/${FS_DOC}`, { headers });
+    if (r.status === 404) return null;
+    const j = await r.json();
+    if (j.error) throw new Error(j.error.message);
+    return fromFsFields(j.fields);
+  } catch(e) { console.warn('fsLoad error', e); return null; }
+}
+
+async function fsSave(data) {
+  try {
+    const tok = await getFbToken();
+    const headers = { 'Content-Type': 'application/json', ...(tok ? { Authorization: `Bearer ${tok}` } : {}) };
+    const fields = Object.fromEntries(Object.entries(data).map(([k,v]) => [k, fsVal(v)]));
+    const r = await fetch(`${FS_BASE}/${FS_COL}/${FS_DOC}`, {
+      method: 'PATCH', headers, body: JSON.stringify({ fields })
+    });
+    const j = await r.json();
+    if (j.error) throw new Error(j.error.message);
+    return true;
+  } catch(e) { console.warn('fsSave error', e); return false; }
+}
+
+function setSyncStatus(msg) {
+  const el = document.getElementById('syncStatus');
+  if (el) el.textContent = msg;
+}
+
 // ===================== DATA LAYER =====================
 const DB_KEY = 'caffe_gestione_v4';
 function loadDB() {
   try { return JSON.parse(localStorage.getItem(DB_KEY)) || defaultDB(); }
   catch { return defaultDB(); }
 }
-function saveDB() { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+function saveDB() {
+  db._updated = Date.now();
+  localStorage.setItem(DB_KEY, JSON.stringify(db));
+  setSyncStatus('💾 salvataggio…');
+  fsSave(db).then(ok => setSyncStatus(ok ? '☁️ sync OK' : '⚠️ solo locale'));
+}
 function defaultDB() {
   return {
     config: {
@@ -920,7 +1011,16 @@ function pageConfig() {
   </div>
 
   <div class="card" style="margin-top:0">
-    <div class="card-title">💾 Dati</div>
+    <div class="card-title">☁️ Sincronizzazione Cloud</div>
+    <p style="font-size:0.85rem;color:var(--text2);margin-bottom:12px">I dati vengono sincronizzati automaticamente su tutti i dispositivi tramite Firebase.</p>
+    <div class="row">
+      <button class="btn btn-primary" onclick="sincronizzaOra()">🔄 Sincronizza ora</button>
+      <span id="syncDetail" style="font-size:0.82rem;color:var(--text2);align-self:center"></span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:0">
+    <div class="card-title">💾 Dati locali</div>
     <div class="row">
       <button class="btn btn-ghost" onclick="esportaDati()">📤 Esporta JSON</button>
       <button class="btn btn-ghost" onclick="document.getElementById('import_file').click()">📥 Importa JSON</button>
@@ -1099,12 +1199,38 @@ function importaDati(event) {
       if (!data.config || !data.ordini) throw new Error('Formato non valido');
       if (!confirm('Importare i dati? Questo sovrascriverà tutto.')) return;
       db = data;
-      saveDB();
+      saveDB(); // salva locale + push cloud
       showPage('ordini');
-      alert('Dati importati con successo!');
+      alert('Dati importati e sincronizzati!');
     } catch { alert('Errore: file non valido.'); }
   };
   reader.readAsText(file);
+}
+
+async function sincronizzaOra() {
+  const det = document.getElementById('syncDetail');
+  setSyncStatus('⏳ sync…');
+  if (det) det.textContent = 'Connessione…';
+  const remote = await fsLoad();
+  if (remote && remote.ordini) {
+    const localUpdated  = db._updated || 0;
+    const remoteUpdated = remote._updated || 0;
+    if (remoteUpdated > localUpdated) {
+      db = remote;
+      localStorage.setItem(DB_KEY, JSON.stringify(db));
+      renderPage();
+      setSyncStatus('☁️ sync OK');
+      if (det) det.textContent = 'Dati aggiornati dal cloud ✓';
+    } else {
+      const ok = await fsSave(db);
+      setSyncStatus(ok ? '☁️ sync OK' : '⚠️ solo locale');
+      if (det) det.textContent = ok ? 'Dati locali inviati al cloud ✓' : 'Errore connessione';
+    }
+  } else {
+    const ok = await fsSave(db);
+    setSyncStatus(ok ? '☁️ sync OK' : '⚠️ solo locale');
+    if (det) det.textContent = ok ? 'Dati caricati sul cloud ✓' : 'Errore connessione';
+  }
 }
 
 function resetDati() {
@@ -1119,7 +1245,38 @@ function resetDati() {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
+
+// Carica prima da localStorage (istantaneo), poi aggiorna da Firestore
 renderPage();
+(async () => {
+  setSyncStatus('⏳ sync…');
+  const remote = await fsLoad();
+  if (remote && remote.ordini) {
+    // Merge: prendi il più aggiornato tra locale e remoto
+    const localUpdated  = db._updated || 0;
+    const remoteUpdated = remote._updated || 0;
+    if (remoteUpdated >= localUpdated) {
+      db = remote;
+      localStorage.setItem(DB_KEY, JSON.stringify(db));
+      renderPage();
+      setSyncStatus('☁️ sync OK');
+    } else {
+      // locale più nuovo → salva su Firestore
+      await fsSave(db);
+      setSyncStatus('☁️ sync OK');
+    }
+  } else if (!remote) {
+    // Primo accesso da questo dispositivo, carica remoto fallisce → push locale
+    if (db.ordini && db.ordini.length > 0) {
+      await fsSave(db);
+      setSyncStatus('☁️ caricato');
+    } else {
+      setSyncStatus('⚪ nessun dato');
+    }
+  } else {
+    setSyncStatus('☁️ sync OK');
+  }
+})();
 </script>
 </body>
 </html>
