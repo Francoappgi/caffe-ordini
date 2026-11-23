@@ -789,7 +789,7 @@ function pageDettaglio() {
   if (!ord.quote?.length) html += `<div class="empty">Nessuna quota inserita.</div>`;
   else {
     const tuttiColleghi = [...new Set(ord.quote.map(q=>q.collega))];
-    html += `<table><thead><tr><th>Collega</th><th>Miscela</th><th class="text-right">Cialde</th><th>Acqua</th><th class="text-right">Importo riga</th><th class="text-right" style="color:var(--accent2)">Tot. Collega</th><th class="text-center">✅ Incassato</th><th class="text-center">💸</th>${!ord.chiuso?'<th></th>':''}</tr></thead><tbody>`;
+    html += `<table><thead><tr><th>Collega</th><th>Miscela</th><th class="text-right">Cialde</th><th>Acqua</th><th class="text-right">Importo riga</th><th class="text-right" style="color:var(--accent2)">Tot. Collega</th><th class="text-center">✅ Incassato</th>${!ord.chiuso?'<th></th>':''}</tr></thead><tbody>`;
     let totaleGenerale = 0;
     for (const collega of tuttiColleghi) {
       const righeCollega = ord.quote.map((q,i)=>({...q,i})).filter(q=>q.collega===collega);
@@ -811,18 +811,17 @@ function pageDettaglio() {
           <td class="text-center">${acqua?'✅':'❌'}</td>
           <td class="text-right">${fmt(costo)}</td>
           <td class="text-right text-accent" style="font-weight:${isLast?700:400}">${isLast ? fmt(totCollega) : ''}</td>
-          <td class="text-center">${isLast ? `<input type="checkbox" class="cb-incassato" ${tutteIncassate?'checked':''} onchange="toggleIncassatoCollega('${ord.id}',${JSON.stringify(idxRighe)},false,this.checked)">` : ''}</td>
-          <td class="text-center">${isLast && !tutteIncassate && totCollega > 0 ? `<button class="btn-paypal" onclick="richiediPagamentoPayPal('${collega}',${totCollega},'${ord.data}')">💸</button>` : ''}</td>
+          <td class="text-center">${isLast ? `<div style="display:flex;align-items:center;justify-content:center;gap:6px"><input type="checkbox" class="cb-incassato" ${tutteIncassate?'checked':''} onchange="toggleIncassatoCollega('${ord.id}',${JSON.stringify(idxRighe)},false,this.checked)">${!tutteIncassate && totCollega > 0 ? `<button class="btn-paypal" onclick="richiediPagamentoPayPal('${collega}',${totCollega},'${ord.data}')">💸</button>` : ''}</div>` : ''}</td>
           ${!ord.chiuso?`<td><button class="btn btn-danger btn-sm" onclick="removeQuota('${ord.id}',${q.i},false)">✕</button></td>`:''}
         </tr>`;
       });
       if (righeCollega.length > 1) {
-        html += `<tr style="border-top:1px solid var(--border);height:3px"><td colspan="${!ord.chiuso?9:8}"></td></tr>`;
+        html += `<tr style="border-top:1px solid var(--border);height:3px"><td colspan="${!ord.chiuso?8:7}"></td></tr>`;
       }
     }
     html += `<tr style="font-weight:700;background:var(--surface2)">
       <td>TOTALE</td><td></td><td class="text-right">${ord.quote.reduce((s,q)=>s+q.cialde,0)}</td>
-      <td></td><td></td><td class="text-right text-accent">${fmt(totaleGenerale)}</td><td></td><td></td>${!ord.chiuso?'<td></td>':''}
+      <td></td><td></td><td class="text-right text-accent">${fmt(totaleGenerale)}</td><td></td>${!ord.chiuso?'<td></td>':''}
     </tr>`;
     html += `</tbody></table>`;
   }
