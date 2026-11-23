@@ -78,6 +78,18 @@
   .badge-oro { background: rgba(255,215,0,.15); color: #ffd700; }
 
   .cb-incassato { width:18px; height:18px; cursor:pointer; accent-color:var(--green); }
+  .btn-paypal { background:none; border:none; font-size:1.2rem; cursor:pointer; padding:2px 4px; border-radius:6px; transition:background .15s; }
+  .btn-paypal:hover { background:var(--surface2); }
+  .paypal-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:1000; display:flex; align-items:flex-end; justify-content:center; }
+  .paypal-modal { background:var(--surface); border-radius:16px 16px 0 0; padding:24px 20px 32px; width:100%; max-width:480px; box-shadow:0 -4px 24px rgba(0,0,0,.3); }
+  .paypal-modal h3 { margin:0 0 6px; font-size:1.1rem; }
+  .paypal-modal .pp-importo { font-size:1.6rem; font-weight:700; color:var(--accent2); margin-bottom:16px; }
+  .paypal-modal .pp-link { font-size:.8rem; color:var(--muted); word-break:break-all; margin-bottom:20px; }
+  .paypal-modal .pp-btns { display:flex; flex-direction:column; gap:10px; }
+  .paypal-modal .pp-btn { padding:14px; border-radius:12px; border:none; font-size:1rem; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; }
+  .pp-btn-wa { background:#25D366; color:#fff; }
+  .pp-btn-tg { background:#2AABEE; color:#fff; }
+  .pp-btn-cancel { background:var(--surface2); color:var(--text); font-weight:400; }
   tr.incassato-si td { opacity:.55; }
   tr.incassato-si td:first-child { text-decoration:line-through; color:var(--text3); }
 
@@ -426,6 +438,44 @@ function toggleIncassatoCollega(ordId, idxArr, isInvenduto, checked) {
   renderPage();
 }
 
+function richiediPagamentoPayPal(collega, importo, dataOrdine) {
+  const PAYPAL_ME = 'https://paypal.me/FDeCesare727';
+  const importoFmt = importo.toFixed(2).replace('.', ',');
+  const importoUrl = importo.toFixed(2);
+  const link = `${PAYPAL_ME}/${importoUrl}`;
+  // Mese dell'ordine
+  let mese = dataOrdine;
+  try {
+    const d = new Date(dataOrdine);
+    mese = d.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
+  } catch(e) {}
+  const messaggio = `Ciao ${collega}! 😊 Ti chiedo €${importoFmt} per le cialde di ${mese}. Puoi pagare qui: ${link} 🙏☕`;
+  const msgEnc = encodeURIComponent(messaggio);
+
+  // Overlay modale
+  const overlay = document.createElement('div');
+  overlay.className = 'paypal-modal-overlay';
+  overlay.innerHTML = `
+    <div class="paypal-modal">
+      <h3>💸 Richiesta pagamento a <strong>${collega}</strong></h3>
+      <div class="pp-importo">€${importoFmt}</div>
+      <div class="pp-link">${link}</div>
+      <div class="pp-btns">
+        <button class="pp-btn pp-btn-wa" onclick="window.open('https://wa.me/?text=${msgEnc}','_blank');document.body.removeChild(this.closest('.paypal-modal-overlay'))">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+          Invia via WhatsApp
+        </button>
+        <button class="pp-btn pp-btn-tg" onclick="window.open('https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent('Ciao ' + collega + '! Ti chiedo €' + importoFmt + ' per le cialde di ' + mese + ' 🙏☕')}','_blank');document.body.removeChild(this.closest('.paypal-modal-overlay'))">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+          Invia via Telegram
+        </button>
+        <button class="pp-btn pp-btn-cancel" onclick="document.body.removeChild(this.closest('.paypal-modal-overlay'))">Annulla</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) document.body.removeChild(overlay); });
+}
+
 function toggleIncassato(ordId, idx, isInvenduto, checked) {
   const ord = db.ordini.find(o=>o.id===ordId);
   if (!ord) return;
@@ -739,7 +789,7 @@ function pageDettaglio() {
   if (!ord.quote?.length) html += `<div class="empty">Nessuna quota inserita.</div>`;
   else {
     const tuttiColleghi = [...new Set(ord.quote.map(q=>q.collega))];
-    html += `<table><thead><tr><th>Collega</th><th>Miscela</th><th class="text-right">Cialde</th><th>Acqua</th><th class="text-right">Importo riga</th><th class="text-right" style="color:var(--accent2)">Tot. Collega</th><th class="text-center">✅ Incassato</th>${!ord.chiuso?'<th></th>':''}</tr></thead><tbody>`;
+    html += `<table><thead><tr><th>Collega</th><th>Miscela</th><th class="text-right">Cialde</th><th>Acqua</th><th class="text-right">Importo riga</th><th class="text-right" style="color:var(--accent2)">Tot. Collega</th><th class="text-center">✅ Incassato</th><th class="text-center">💸</th>${!ord.chiuso?'<th></th>':''}</tr></thead><tbody>`;
     let totaleGenerale = 0;
     for (const collega of tuttiColleghi) {
       const righeCollega = ord.quote.map((q,i)=>({...q,i})).filter(q=>q.collega===collega);
@@ -762,16 +812,17 @@ function pageDettaglio() {
           <td class="text-right">${fmt(costo)}</td>
           <td class="text-right text-accent" style="font-weight:${isLast?700:400}">${isLast ? fmt(totCollega) : ''}</td>
           <td class="text-center">${isLast ? `<input type="checkbox" class="cb-incassato" ${tutteIncassate?'checked':''} onchange="toggleIncassatoCollega('${ord.id}',${JSON.stringify(idxRighe)},false,this.checked)">` : ''}</td>
+          <td class="text-center">${isLast && !tutteIncassate && totCollega > 0 ? `<button class="btn-paypal" onclick="richiediPagamentoPayPal('${collega}',${totCollega},'${ord.data}')">💸</button>` : ''}</td>
           ${!ord.chiuso?`<td><button class="btn btn-danger btn-sm" onclick="removeQuota('${ord.id}',${q.i},false)">✕</button></td>`:''}
         </tr>`;
       });
       if (righeCollega.length > 1) {
-        html += `<tr style="border-top:1px solid var(--border);height:3px"><td colspan="${!ord.chiuso?8:7}"></td></tr>`;
+        html += `<tr style="border-top:1px solid var(--border);height:3px"><td colspan="${!ord.chiuso?9:8}"></td></tr>`;
       }
     }
     html += `<tr style="font-weight:700;background:var(--surface2)">
       <td>TOTALE</td><td></td><td class="text-right">${ord.quote.reduce((s,q)=>s+q.cialde,0)}</td>
-      <td></td><td></td><td class="text-right text-accent">${fmt(totaleGenerale)}</td><td></td>${!ord.chiuso?'<td></td>':''}
+      <td></td><td></td><td class="text-right text-accent">${fmt(totaleGenerale)}</td><td></td><td></td>${!ord.chiuso?'<td></td>':''}
     </tr>`;
     html += `</tbody></table>`;
   }
